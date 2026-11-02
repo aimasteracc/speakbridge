@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-02",
+  "baseline": "42bca8a",
+  "iconPackage": {
+    "name": "lucide-react",
+    "version": "0.468.0",
+    "license": "ISC with Feather-derived icons under MIT",
+    "imports": [
+      "ArrowDownToLine",
+      "ArrowRight",
+      "ArrowUpRight",
+      "AudioLines",
+      "BookOpen",
+      "Check",
+      "CheckCircle2",
+      "ChevronDown",
+      "ChevronRight",
+      "CircleHelp",
+      "ClipboardList",
+      "Clock3",
+      "Command",
+      "Copy",
+      "FileText",
+      "Flag",
+      "GripHorizontal",
+      "Headphones",
+      "History",
+      "Home",
+      "KeyRound",
+      "Keyboard",
+      "Languages",
+      "LoaderCircle",
+      "Mic",
+      "Monitor",
+      "Play",
+      "Plus",
+      "RotateCcw",
+      "Search",
+      "Settings2",
+      "ShieldCheck",
+      "Sparkles",
+      "Square",
+      "Subtitles",
+      "Trash2",
+      "X"
+    ]
+  },
+  "projectAssets": [
+    "build/icon.svg",
+    "build/icon.png",
+    "electron/tray.png"
+  ],
+  "trayMatchesProjectPng": true,
+  "bundledFontFiles": [],
+  "skill": {
+    "name": "ui-ux-pro-max",
+    "revision": "3a13158ff1f32156cbe144108de48eda2ecaed9a",
+    "verifiedFiles": 73,
+    "license": "MIT",
+    "preexisting": true
+  },
+  "contrastRatios": [
+    {
+      "foreground": "#182230",
+      "background": "#FFFFFF",
+      "ratio": 16.03
+    },
+    {
+      "foreground": "#526079",
+      "background": "#FFFFFF",
+      "ratio": 6.35
+    },
+    {
+      "foreground": "#FFFFFF",
+      "background": "#2563EB",
+      "ratio": 5.17
+    },
+    {
+      "foreground": "#FFFFFF",
+      "background": "#B42318",
+      "ratio": 6.57
+    }
+  ]
+}

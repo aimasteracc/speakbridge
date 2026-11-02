@@ -27,3 +27,5 @@ test-artifacts/
 /credential.json
 /soniox-credential.json
 electron/asr-runtime.mjs
+electron/native/dictation-mac-*
+electron/native/*.exe
