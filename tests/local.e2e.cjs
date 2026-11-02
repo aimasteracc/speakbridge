@@ -1,0 +1,52 @@
+// Requires test-artifacts/models (download once) and local-test.pcm (synthetic speech).
+const { _electron: electron } = require('playwright');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const assert = require('node:assert/strict');
+const root = path.resolve(__dirname, '..');
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'speakbridge-local-e2e-'));
+let app;
+(async () => {
+  try {
+    fs.cpSync(path.join(root, 'test-artifacts/models'), path.join(directory, 'models'), { recursive: true });
+    const fixture = path.join(directory, 'harness.cjs');
+    fs.writeFileSync(fixture, `let data=''; process.stdin.on('data',c=>data+=c);process.stdin.on('end',()=>{const request=JSON.parse(data);if(!request.input.includes('Windows'))process.exit(2);console.log('这是本地语音识别与 Harness 的测试译文。');});`);
+    const env = { ...process.env, SPEAKBRIDGE_DATA_DIR: directory }; delete env.ELECTRON_RUN_AS_NODE;
+    app = await electron.launch({ args: [root], env });
+    const page = await app.firstWindow(); page.setDefaultTimeout(15000);
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await page.getByLabel('语音转写引擎').selectOption('local');
+    await page.getByLabel('翻译与纪要引擎').selectOption('deepseek');
+    await page.getByLabel('DeepSeek Harness 配置目录（可留空）').fill('');
+    await page.getByRole('button', { name: '保存设置', exact: true }).click();
+    await page.getByText('设置已保存', { exact: true }).waitFor();
+    assert.equal(await page.evaluate(async () => (await window.speakbridge.bootstrap()).settings.textProvider), 'deepseek');
+    await page.evaluate(() => document.querySelector('.main-content').scrollTo(0, 0));
+    await page.screenshot({ path: path.join(root, 'test-artifacts/10-deepseek-settings.png') });
+    console.log('PASS: dedicated DeepSeek Harness option and configuration persisted');
+    await page.getByLabel('翻译与纪要引擎').selectOption('harness');
+    await page.getByLabel('Harness 可执行文件').fill(process.execPath);
+    await page.getByLabel('启动参数（JSON 数组）').fill(JSON.stringify([fixture]));
+    await page.getByRole('button', { name: '保存设置', exact: true }).click();
+    await page.getByText('设置已保存', { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(root, 'test-artifacts/07-local-settings.png') });
+    const settings = await page.evaluate(async () => (await window.speakbridge.bootstrap()).settings);
+    assert.equal(settings.hasKey, false); assert.equal(settings.textProvider, 'harness');
+    console.log('PASS: local provider settings saved without API credentials');
+    await page.getByRole('button', { name: '实时翻译', exact: true }).click();
+    await page.evaluate(async settings => { await window.speakbridge.start({ demo: false, settings: { ...settings, sourceLanguage: 'en' } }); }, settings);
+    const pcm = fs.readFileSync(path.join(root, 'test-artifacts/local-test.pcm'));
+    await page.evaluate(bytes => { const pcm = Uint8Array.from(bytes); for (let i = 0; i < pcm.length; i += 4800) window.speakbridge.audio(pcm.slice(i, i + 4800)); }, [...pcm]);
+    const ended = await page.evaluate(() => window.speakbridge.stop());
+    assert.match(ended.session.segments[0].text, /Windows and Mac/);
+    assert.match(ended.session.segments[0].translation, /Harness/);
+    assert.deepEqual(ended.session.engines, { speech: 'local', text: 'harness' });
+    assert.equal(ended.session.status, 'completed');
+    await page.getByRole('button', { name: /Hello, this is a voice translation test/ }).click();
+    await page.getByText('这是本地语音识别与 Harness 的测试译文。', { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(root, 'test-artifacts/08-local-transcript.png') });
+    fs.writeFileSync(path.join(root, 'test-artifacts/local-e2e-result.json'), JSON.stringify({ passed: true, scenarios: 3, transcript: ended.session.segments[0].text, engines: ended.session.engines }, null, 2));
+    console.log('PASS: native SenseVoice worker -> harness stdin -> saved bilingual session, no API key');
+  } finally { if (app) await app.close(); fs.rmSync(directory, { recursive: true, force: true }); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

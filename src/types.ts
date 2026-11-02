@@ -1,0 +1,65 @@
+export type AudioSource = 'microphone' | 'system' | 'both';
+export type Settings = {
+  speechProvider: 'auto' | 'api' | 'soniox' | 'local'; localModel: 'sensevoice' | 'whisper-base' | 'qwen3-asr' | 'whisper-turbo' | 'ensemble'; textProvider: 'auto' | 'api' | 'codex' | 'claude' | 'deepseek' | 'ollama' | 'harness';
+  codexPath: string; claudePath: string; deepseekPath: string; deepseekHome: string; ollamaUrl: string; ollamaModel: string; harnessPath: string; harnessArgs: string;
+  baseUrl: string; transcriptionModel: string; translationModel: string;
+  sourceLanguage: string; targetLanguage: string; audioSource: AudioSource;
+  microphoneId: string; viewMode: 'transcript' | 'subtitle'; silenceMs: number;
+  speechThreshold: number; subtitleFontSize: number; dictionary: string[];
+  hasKey: boolean; hasSonioxKey: boolean; canEncrypt: boolean | null; keyError?: string; sonioxKeyError?: string;
+};
+export type Engines = { speech: string; text: string };
+export type Capabilities = { codex: string; claude: string; deepseek: string; harness: string; localInstalled: boolean; localReady: boolean; localModels: Record<Settings['localModel'], boolean> };
+export const engineNames: Record<string, string> = { api: 'API', soniox: 'Soniox 实时转写', local: '本地语音', codex: 'Codex', claude: 'Claude Code', deepseek: 'DeepSeek Harness', ollama: 'Ollama', harness: 'Harness', off: '关闭翻译' };
+export const modelNames: Record<Settings['localModel'], string> = { ensemble: '增强识别', 'qwen3-asr': 'Qwen3-ASR 1.7B', 'whisper-turbo': 'Whisper Turbo', sensevoice: 'SenseVoice', 'whisper-base': 'Whisper Base' };
+export type Segment = { id: string; text: string; translation: string; startMs: number; endMs: number; final: boolean; error?: string; translationError?: string; pending?: string };
+export type InputDiagnostics = { stage?: string; code?: string; role?: string; subrole?: string; selectionAvailable?: boolean; enabled?: boolean; editable?: boolean; readOnly?: boolean };
+export type DictationResult = { status: 'pending' | 'inserted' | 'sent' | 'retained' | 'cancelled' | 'empty'; text: string; targetName: string; message: string; retryable?: boolean; diagnostics?: InputDiagnostics };
+export type DictationPreferences = { holdKey: 'fn' | 'rightalt' | 'rightctrl' | 'off'; handsFreeShortcut: string };
+export type DictationReadiness = { preferences: DictationPreferences; holdAvailable: boolean; handsFreeAvailable: boolean; inputAvailable: boolean; microphonePermission: string; modelInstalled: boolean; modelReady: boolean; message: string };
+export type DictationFeedback = { phase: 'selecting' | 'preparing' | 'listening' | 'finishing' | 'inserting' | 'done'; mode: 'hold' | 'handsfree'; targetName: string; message: string };
+export type Session = { id: string; title: string; startedAt: number; endedAt?: number; durationMs: number; audioSource: AudioSource; sourceLanguage: string; targetLanguage: string; demo: boolean; segments: Segment[]; notes: string; starred: boolean; status: string; engines?: Engines; speechModel?: Settings['localModel']; mode?: 'dictation'; dictation?: DictationResult };
+export type SessionState = { status: 'idle' | 'connecting' | 'recording' | 'stopping'; session: Session | null; error: string };
+export type Bootstrap = { settings: Settings; sessions: Session[]; state: SessionState; platform: string; osVersion: string; appVersion: string; shortcutAvailable: boolean; dictationShortcutAvailable: boolean; dictation: DictationReadiness; dictationFeedback?: DictationFeedback; dataDirectory: string; capabilities: Capabilities };
+export type BridgeEvent = { type: string; payload: unknown };
+export type Bridge = {
+  bootstrap(): Promise<Bootstrap>;
+  saveSettings(value: Settings & { apiKey?: string; sonioxApiKey?: string }): Promise<Settings>;
+  testConnection(): Promise<boolean>;
+  checkEngines(settings: Settings): Promise<Engines>;
+  detectEngines(): Promise<Capabilities>;
+  prepareModel(): Promise<Capabilities>;
+  start(options: { demo: boolean; settings: Settings; dictationToken?: string }): Promise<SessionState>;
+  stop(): Promise<SessionState>;
+  dictationPermission(prompt: boolean): Promise<{ ok: boolean; available: boolean; message: string }>;
+  dictationStatus(prompt: boolean): Promise<DictationReadiness>;
+  saveDictationPreferences(value: DictationPreferences): Promise<DictationReadiness>;
+  warmDictation(): Promise<DictationReadiness>;
+  finishDictation(): Promise<void>;
+  armDictationInput(kind: 'test' | 'retry'): Promise<boolean>;
+  insertArmedDictation(): Promise<void>;
+  dictationLevel(level: number): void;
+  cancelDictation(message?: string): Promise<void>;
+  copyDictation(): Promise<boolean>;
+  hideDictation(): Promise<void>;
+  clearDictation(id: string): Promise<boolean>;
+  audio(bytes: Uint8Array): void;
+  listSessions(): Promise<Session[]>;
+  deleteSession(id: string): Promise<Session[]>;
+  deleteNotes(id: string): Promise<Session>;
+  deleteSessions(ids: string[]): Promise<Session[]>;
+  deleteNotesMany(ids: string[]): Promise<Session[]>;
+  updateSession(id: string, patch: { title?: string; starred?: boolean }): Promise<Session>;
+  exportSession(id: string, format: string): Promise<boolean>;
+  copySession(id: string): Promise<boolean>;
+  retryTranslation(id: string): Promise<Session>;
+  makeNotes(id: string): Promise<Session>;
+  showOverlay(show: boolean): Promise<void>;
+  hideOverlay(): Promise<void>;
+  onEvent(callback: (event: BridgeEvent) => void): () => void;
+};
+declare global { interface Window { speakbridge: Bridge } }
+export const languages: Record<string, string> = { zh: '简体中文', ja: '日本語', en: 'English', ko: '한국어', es: 'Español', fr: 'Français', de: 'Deutsch' };
+export const sourceNames = { microphone: '麦克风', system: '系统音频', both: '麦克风 + 系统音频' };
+export function duration(ms: number) { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`; }
+export function dateTime(time: number) { return new Date(time).toLocaleString('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }

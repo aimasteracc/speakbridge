@@ -1,0 +1,99 @@
+{
+  "name": "speakbridge",
+  "version": "0.7.8",
+  "private": true,
+  "type": "module",
+  "description": "声桥 SpeakBridge — 跨平台实时转写、翻译与桌面字幕",
+  "author": "SpeakBridge",
+  "license": "MIT",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "node scripts/build-dictation.mjs && node scripts/build-asr.mjs && node scripts/dev.mjs",
+    "dev:web": "vite --host 127.0.0.1",
+    "build": "node scripts/build-dictation.mjs && node scripts/build-asr.mjs && tsc --noEmit && vite build",
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "check:sensitive": "node scripts/check-sensitive.cjs",
+    "test:e2e": "node tests/electron.e2e.cjs",
+    "pack:mac": "npm run build && electron-builder --mac zip --arm64 --x64",
+    "pack:win": "npm run build && electron-builder --win zip --x64",
+    "dist:mac": "npm run build && electron-builder --mac dmg",
+    "dist:win": "npm run build && electron-builder --win nsis --x64",
+    "test:asr": "node tests/asr-quality.cjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "onnxruntime-node": "1.22.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "sherpa-onnx-node": "2.0.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "4.2.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0",
+    "playwright": "^1.58.0",
+    "rolldown": "^1.2.16",
+    "typescript": "^5.9.3",
+    "vite": "8.3.5"
+  },
+  "build": {
+    "appId": "app.speakbridge.desktop",
+    "productName": "SpeakBridge",
+    "artifactName": "SpeakBridge-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.productivity",
+      "minimumSystemVersion": "13.0",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "strictVerify": true,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "声桥使用麦克风进行实时语音转写与翻译。",
+        "NSAudioCaptureUsageDescription": "声桥采集电脑播放的声音，用于会议与视频的实时转写和翻译。",
+        "NSScreenCaptureUsageDescription": "声桥通过屏幕共享获取系统音频，不保存或发送屏幕画面。"
+      }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/bin/**/*",
+      "node_modules/sherpa-onnx-*/**/*",
+      "electron/native/**/*"
+    ]
+  },
+  "overrides": {
+    "adm-zip": "0.6.1",
+    "sherpa-onnx-darwin-arm64": "2.0.1",
+    "sherpa-onnx-darwin-x64": "2.0.1",
+    "sherpa-onnx-win-x64": "2.0.1",
+    "sherpa-onnx-win-ia32": "2.0.1",
+    "sherpa-onnx-linux-x64": "2.0.1",
+    "sherpa-onnx-linux-arm64": "2.0.1",
+    "sherpa-onnx-win-arm64": "2.0.1"
+  }
+}

@@ -1,0 +1,79 @@
+# SpeakBridge 0.5.0：更快出字、持续修订
+
+2026-11-01，macOS / Apple Silicon，24 GB 内存。本次比较的是声桥 0.4.0 与 0.5.0，不是原版 Speakly。没有同音频的原版结果，不能宣称已超过原版。
+
+## 实现
+
+- SenseVoice、增强模式：预览触发间隔从 4 秒变为 0.8 秒。保留原有 Silero VAD、停顿分段、24 秒最长窗口及 1 秒重叠，不缩短用于最终识别的语音。
+- 队列中的同句旧预览被最新预览替换；完整定稿优先处理。最终结果已返回时，晚到的预览不会覆盖它。
+- 增强模式使用独立 SenseVoice 进程生成初稿，三模型复核在原进程继续。额外占用一份 SenseVoice 模型内存，不改变共识合并算法。其余单模型仍约每 4 秒预览，避免重模型重复解码过载。
+- 界面持续显示已有初稿并标注“文字可能修订”，直到模型定稿。这是本地短间隔窗口重识别，不是将 SenseVoice 变为原生流式模型。
+- Soniox 使用真正的持续音频 WebSocket：已确认 token 只追加一次，未确认尾部每次替换，收到句末标记后定稿并调用既有文字引擎翻译。停止时发送空文本 EOF，等待最终结果；断网或超时保留部分文字并明确标记错误。
+
+## 协议与费用
+
+Soniox 固定连接 `wss://stt-rt.soniox.com/transcribe-websocket`，使用 `stt-rt-v5`、24 kHz 单声道 PCM16、语言提示、个人词典和语义端点检测。采用连接头 Bearer 认证，密钥由 Electron 主进程读取，独立系统加密保存，不返回前端。原有 OpenAI 兼容密钥与自动路由保持兼容；Soniox 必须主动选择。
+
+Soniox 是按用量收费的云服务。本地语音识别没有 API 调用费用；Codex / Claude / DeepSeek Harness 的文字翻译仍使用所配置账户的服务和额度。Soniox 翻译没有接入原生翻译通道，仍按句调用应用选择的文字引擎。
+
+没有使用真实 Soniox 密钥，没有发送用户录音，没有调用原版私有接口。Soniox 验证仅覆盖本机模拟协议与桌面流程，不能证明云端可用性、实际延迟或识别准确率。
+
+依据官方文档核对协议：[WebSocket API](https://docs.soniox.com/api-reference/stt/websocket-api)、[确认与临时 token 的语义](https://docs.soniox.com/stt/rt/real-time-transcription)、[WebSocket 认证](https://docs.soniox.com/guides/websocket-authentication)、[语义端点](https://docs.soniox.com/stt/rt/endpoint-detection)。原版公开信息与本地分析边界见 [原版研究](SPEAKLY-STREAMING-RESEARCH.md)。
+
+## 验证方法
+
+- 单元测试覆盖临时文本替换、确认前缀不重复、时间戳、空文本 EOF、迟到定稿、断网保留、超时、打开 WebSocket 后的鉴权失败、密钥独立性、路由、预览合并、最终结果保护及最终 PCM 完全相同。
+- Electron 测试使用隔离数据目录，本机 WebSocket 端到端验证 Soniox 的 UI 设置、加密密钥、同一行修订、定稿入历史与移除密钥；未访问 Soniox 云端。
+- 延迟测试使用 `tests/streaming-latency.cjs`，分别加载修改前备份的 0.4.0 和 0.5.0 实际本地识别代码、同版原生库与同一套模型，每 100 ms 按音频原速输入 24 kHz PCM。中日语各一段，每个模型各重复两次。
+- 首次出字从第一块音频开始计时，包含录音前导静音；不包含模型加载、界面 IPC 或文字翻译。计数与更新间隔只计文字确有变化的预览，过滤重复状态事件。
+- 32 段中日语独立验证集沿用 0.4.0 的固定 FLEURS 文件（每语言第 33–48 条）。干净录音检查最终输出是否逐条一致，不将预览次数增加解释为准确率提升。
+
+## 原速录音延迟结果
+
+两次重复的平均首次出字时间；更新间隔为文字发生变化时的中位数。
+
+| 模式 | 语言 | 首次出字 0.4 → 0.5 | 预览更新间隔 0.4 → 0.5 | 最后定稿 0.4 → 0.5 |
+| --- | --- | --- | --- | --- |
+| SenseVoice | 中文 | 5.08 → 1.85 秒 | 4.05 → 0.81 秒 | 14.99 → 14.99 秒 |
+| SenseVoice | 日语 | 7.79 → 4.55 秒 | 4.04 → 0.81 秒 | 12.11 → 12.13 秒 |
+| 增强模式 | 中文 | 5.09 → 1.85 秒 | 4.04 → 0.81 秒 | 22.47 → 22.63 秒 |
+| 增强模式 | 日语 | 7.80 → 4.55 秒 | 4.01 → 0.81 秒 | 16.70 → 16.61 秒 |
+
+每个模式、每个语言的最终文字均与旧版相同。日语样本前导静音较长，首次出字时间包含这些静音。增强模式中文定稿仍需约 22.6 秒（音频 15.42 秒），本次主要加快初稿，并没有消除大模型复核耗时；中日语的定稿时间差异在本次小样本中较小。
+
+这仅有两段朗读音频、每种模式两次重复，不代表所有设备、口音或会议。原始逐事件数据与摘要保存在 `test-artifacts/streaming-latency-*.json`，可检查早期猜测与最终文字，不能据此宣称达到原版速度或准确率。
+
+## 最终 Mac 应用验证
+
+最终 0.5.0 Apple Silicon 包以隔离目录启动，真实三模型运行：15.42 秒中文录音按原速经 Electron IPC 输入，第一次字幕出现约 **3.04 秒**；0.4.0 同脚本记录为 **6.32 秒**。这一计时包含测试输入序列化与界面链路，所以比上表直接喂给引擎的计时更长，不能混用。两次应用测试的录音开始至定稿分别为 23.27、23.33 秒。各为一次测量。
+
+词典参数传递、超长词典拒绝、不支持语言拒绝、静音无输出和模型选择持久化均通过。测试外文人名 Oravec 在提供词典后仍未识别正确，不能把参数接入当作识别成功。机器结果见 `test-artifacts/precision-e2e-0.5.0-result.json`。
+
+0.5.0 已在本机打开，沿用原有 SenseVoice 选项。启动前确认旧应用已退出且无活动录音；没有关闭用户进程。设置、会话历史及两个凭据文件的前后哈希一致。原版发布目录保留，Soniox 未配置、未启用。
+
+## 最终识别准确率回归
+
+32 段独立验证集分别运行 SenseVoice 与增强模式，两个模式各 32 段的最终文字均与 0.4.0 逐条完全相同。中文参考 586 字、日语参考 837 字；本轮未重新做加噪测试。
+
+| 模式 | 中文 CER | 日语 CER | 与 0.4.0 的变化 |
+| --- | --- | --- | --- |
+| SenseVoice | 68/586 = 11.60% | 83/837 = 9.92% | 无 |
+| 增强模式 | 64/586 = 10.92% | 58/837 = 6.93% | 无 |
+
+本轮提升的是显示速度与修订过程，不能把这些结果描述为准确率再次提高。逐条结果在 `test-artifacts/asr-validation/0.5.0-*-clean.json`，比较汇总为 `test-artifacts/accuracy-regression-0.5.0.json`。
+
+## 复现
+
+```sh
+npm test
+npm run build
+npm run test:e2e
+node tests/soniox.e2e.cjs
+ASR_OUTPUT_TAG=0.5.0 node tests/streaming-latency.cjs
+ASR_CORPUS_DIR=test-artifacts/asr-validation ASR_MIN_RANK=33 ASR_OUTPUT_TAG=0.5.0- node tests/asr-evaluate.cjs sensevoice clean
+ASR_CORPUS_DIR=test-artifacts/asr-validation ASR_MIN_RANK=33 ASR_OUTPUT_TAG=0.5.0- node tests/asr-evaluate.cjs ensemble clean
+```
+
+实际模型与测试语料需事先准备，文件及 SHA-256 见 0.4.0 识别报告。修改前源代码备份在 `test-artifacts/source-0.4.0-before-streaming.tar.gz`。延迟对照将其 `electron/` 解到独立目录、复用同版依赖，通过 `ASR_RUNTIME_ROOT` 指向旧代码运行同一脚本；没有运行原版 Speakly 的识别服务。
+
+发行包位于 `release/0.5.0/`，包括 macOS arm64、macOS x64、Windows x64。Mac arm64 使用隔离目录实际启动验证；Windows 和 Intel Mac 仅完成构建与代码 / 原生架构检查，尚未实机运行。安装包仍未签名 / 公证。
