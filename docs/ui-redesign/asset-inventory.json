@@ -32,6 +32,7 @@
       "LoaderCircle",
       "Mic",
       "Monitor",
+      "Palette",
       "Play",
       "Plus",
       "RotateCcw",
@@ -80,5 +81,6 @@
       "background": "#B42318",
       "ratio": 6.57
     }
-  ]
+  ],
+  "runtimeVersion": "0.7.9"
 }

@@ -6,7 +6,7 @@ const root = path.resolve(__dirname, '..'), version = require('../package.json')
 const release = path.join(root, 'release', version);
 const hash = buffer => crypto.createHash('sha256').update(buffer).digest('hex');
 function files(folder) { return fs.readdirSync(path.join(root, folder), { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? files(folder + '/' + entry.name) : [folder + '/' + entry.name]); }
-const source = [...files('electron'), ...files('dist')];
+const source = [...files('electron'), ...files('dist'), ...files('licenses'), 'LICENSE', 'THIRD_PARTY_NOTICES.md'];
 const checks = [];
 // Signing changes Mach-O signature bytes, but must not change executable code.
 function unsignedHash(buffer) {

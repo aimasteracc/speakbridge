@@ -20,16 +20,25 @@
 - 全局快捷键：`Cmd/Ctrl + Shift + Space` 开始/结束，`Cmd/Ctrl + Shift + L` 显示/隐藏字幕。
 - API Key 通过 Electron safeStorage 使用系统机制加密，渲染页面不会收到密钥。
 - 演示模式使用明确标注的预设中日双语文本，不录音、不调用 API。
+- 「外观与配色」提供雾白、暖砂、松绿、海蓝、深夜与跟随系统；实时预览并在本机自动保存。
 
 ## 直接运行
 
-本次验证产物在 `release/0.7.8/`（常规打包命令默认输出到 `release/`）：
+本次验证产物在 `release/0.7.9/`（常规打包命令默认输出到 `release/`）：
 
-- macOS Apple Silicon：`SpeakBridge-0.7.8-mac-arm64.zip`
-- macOS Intel：`SpeakBridge-0.7.8-mac-x64.zip`
-- Windows x64：`SpeakBridge-0.7.8-win-x64.zip`
+- macOS Apple Silicon：`SpeakBridge-0.7.9-mac-arm64.zip`
+- macOS Intel：`SpeakBridge-0.7.9-mac-x64.zip`
+- Windows x64：`SpeakBridge-0.7.9-win-x64.zip`
 
 Mac 解压后将 `SpeakBridge.app` 放入“应用程序”并打开；Windows 解压整个目录，运行 `SpeakBridge.exe`。不要只移动 exe，需保留同目录文件。Mac 使用本地 ad-hoc 签名，未使用开发者证书或 Apple 公证，适合内部试用；本地签名不保证升级后保留权限，公开分发前需要稳定的开发者签名与公证。
+
+## 0.7.9 可切换配色
+
+- 左侧下方「外观与配色」可选择5套完整主题，或跟随系统切换明暗。点击立即应用，无需额外保存；支持键盘方向键选择和恢复默认。
+- 主窗口、输入控件、历史选择、删除提示和 Markdown 议事录统一使用主题色，增加正文与辅助文字的可读性。悬浮字幕和听写提示保持原有深色阅读面板。
+- 配色偏好只存储在应用自己的本地存储，不发送到服务端，不修改语音引擎、密钥或会话历史。保存失败时明确提示。
+- 图标继续使用 Lucide，配布物增加 Lucide / Feather 原文表记，见 [UI 素材表记](THIRD_PARTY_NOTICES.md)。没有新增外部字体或图片请求。
+- 本次实现配色与文字层级调整；之前的双栏议事录概念图仍是设计提案，不代表所有布局已经实现。
 
 ## 0.7.8 日本語の議事録と Markdown 表示
 
