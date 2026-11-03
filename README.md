@@ -4,11 +4,22 @@
 
 **[文档索引](docs/README.md) · [开始使用](docs/guides/getting-started.md) · [DeepSeek 配置](docs/guides/engines.md#deepseek-api) · [开发指南](docs/development.md)**
 
+## 看看实际界面
+
+点击下方播放，**1 分 54 秒**了解配置、会议纪要、跨应用听写、历史管理与配色。
+
+https://github.com/user-attachments/assets/a7f3ffc8-fce0-4059-9984-a6cbb371f82d
+
+视频带中文字幕和点击提示。画面来自当前界面，使用虚构资料及模拟服务；不代表真实 API 或原生输入验收。
+
+[下载完整 MP4](docs/media/speakbridge-quickstart-zh.mp4) · [分章说明与字幕](docs/guides/video-tour.md)
+
+<details>
+<summary>查看功能与上手流程图</summary>
+
 ![声桥功能与上手流程](docs/media/speakbridge-overview.png)
 
-**[观看／下载中文上手视频（1 分 54 秒）](docs/media/speakbridge-quickstart-zh.mp4)** · [图文与视频指南](docs/guides/video-tour.md)
-
-视频带中文字幕和点击提示，展示配置、会议纪要、听写、历史管理与配色。画面来自当前界面，使用虚构资料及模拟服务；不代表真实 API 或原生输入验收。
+</details>
 
 ## 能做什么
 

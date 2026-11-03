@@ -2,15 +2,15 @@
 
 [返回文档索引](../README.md)
 
-先看流程图了解两种使用方式，再观看视频中的实际界面操作。素材对应 **0.7.11**。
-
-![声桥功能与上手流程](../media/speakbridge-overview.png)
+先看视频中的实际界面操作，再用流程图核对步骤。素材对应 **0.7.11**。
 
 ## 观看视频
 
+https://github.com/user-attachments/assets/a7f3ffc8-fce0-4059-9984-a6cbb371f82d
+
 **[观看／下载中文上手视频（MP4）](../media/speakbridge-quickstart-zh.mp4)** · [本地播放页](../media/watch.html) · [SRT 字幕](../media/speakbridge-quickstart-zh.srt) · [VTT 字幕](../media/speakbridge-quickstart-zh.vtt)
 
-视频约 **1 分 54 秒**，为 1920 × 1080、24 fps 的 H.264 MP4，带嵌入式中文字幕、点击提示和章节说明，**无配音、无背景音乐**。GitHub 若只显示文件信息，可下载 MP4 播放；克隆仓库后也可用浏览器打开 `docs/media/watch.html`，在本地按章节跳转。
+视频约 **1 分 54 秒**，为 1920 × 1080、24 fps 的 H.264 MP4，带嵌入式中文字幕、点击提示和章节说明，**无配音、无背景音乐**。README 和本页使用 GitHub 附件播放器，可直接播放；仓库内保留相同的 MP4 供下载。克隆仓库后也可用浏览器打开 `docs/media/watch.html`，在本地按章节跳转。
 
 | 时间 | 章节 | 看完后可以做什么 | 详细说明 |
 | --- | --- | --- | --- |
@@ -20,6 +20,13 @@
 | 01:07 | 跨应用听写 | 点击输入框、按快捷键、说话、结束并检查结果 | [跨应用听写](dictation.md) |
 | 01:31 | 管理历史 | 全选并确认删除范围，区分会话与纪要 | [记录管理](meeting-notes.md#历史记录与删除范围) |
 | 01:42 | 配色与完成 | 切换主题，找到进一步的使用说明 | [文档索引](../README.md) |
+
+<details>
+<summary>查看功能与上手流程图</summary>
+
+![声桥功能与上手流程](../media/speakbridge-overview.png)
+
+</details>
 
 ## 演示范围
 
@@ -49,5 +56,7 @@ node scripts/media/render.cjs
 # 更新播放页、视频封面与素材哈希
 node scripts/media/package.cjs
 ```
+
+GitHub 内嵌播放器使用单独上传的附件，不会随仓库内 MP4 自动更新。更换视频后，在 GitHub 的 Markdown 编辑器上传新的 MP4，并同步替换 README 和本页中独占一段的 `github.com/user-attachments/assets/…` 地址；提交前用预览确认可播放和跳转。不要把临时签名的媒体下载地址写入文档。
 
 录制使用本地 Vite、无头 Chromium 和内存夹具，屏蔽外部 HTTP 请求；不会启动已安装的桌面应用或执行原生输入。复用已安装依赖时不需要运行应用的原生构建。制作源文件在 [scripts/media](../../scripts/media)，中间录屏与检查图保留在被 Git 排除的 `test-artifacts/onboarding-media/`。更新正式素材后应再次检查文字、画面、字幕时序和可播放性。
