@@ -17,7 +17,7 @@ if (!valid) {
       '/reference:System.Web.Extensions.dll', ...['UIAutomationClient', 'UIAutomationTypes', 'WindowsBase'].map(name => '/reference:' + path.join(framework, 'WPF', name + '.dll')), source], { stdio: 'inherit', windowsHide: true });
   } else {
     const sdk = process.env.SPEAKBRIDGE_DOTNET_DIR, refs = process.env.SPEAKBRIDGE_NET48_REFS;
-    if (!sdk || !refs) throw Error('Windows helper is missing or stale. Build on Windows, or set SPEAKBRIDGE_DOTNET_DIR and SPEAKBRIDGE_NET48_REFS (see DICTATION-0.6.md).');
+    if (!sdk || !refs) throw Error('Windows helper is missing or stale. Build on Windows, or set SPEAKBRIDGE_DOTNET_DIR and SPEAKBRIDGE_NET48_REFS (see docs/development.md).');
     const versions = readdirSync(path.join(sdk, 'sdk')).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     const compiler = path.join(sdk, 'sdk', versions.at(-1), 'Roslyn', 'bincore', 'csc.dll');
     execFileSync(path.join(sdk, 'dotnet'), [compiler, '/nologo', '/noconfig', '/nostdlib+', '/langversion:5', '/target:exe', '/platform:x64', '/optimize+', '/out:' + output,

@@ -1,3 +1,5 @@
+> 历史归档：保留当时的结论，不代表当前版本或服务状态。现行用法见[文档索引](../../README.md)，验收边界见[验证状态](../../verification.md)。文中测试产物路径相对于项目根目录；未纳入 Git 的本机证据不随源码提供。
+
 # SpeakBridge 0.4.0 识别验证
 
 2026-11-01，Apple Silicon / 24 GB 内存，离线 CPU 推理。这里比较的是我们自己的 0.3.0 与 0.4.0；没有原版 Speakly 的同音频转写，不能宣称已超过原版。REA 是此前分析程序的工具，不是本次语音识别引擎。
@@ -72,6 +74,6 @@ ASR_CORPUS_DIR=test-artifacts/asr-validation ASR_MIN_RANK=33 node tests/asr-eval
 
 评测默认读取 `test-artifacts/models`。Windows 可在 PowerShell 中设置同名环境变量。使用旧 Mac 包复核时，以该包可执行文件设置 `ELECTRON_RUN_AS_NODE=1` 启动脚本，并将 `ASR_RUNTIME_ROOT` 指向其 `Contents/Resources/app.asar/electron`、`ASR_OUTPUT_TAG=0.3.0-`。
 
-功能与安装包验证见 [QA.md](QA.md)。包校验结果在 `test-artifacts/package-0.4.0-verification.json`，下载包哈希在 `release/0.4.0/SHA256SUMS.txt`。旧源码备份为 `test-artifacts/asr-research/source-0.3.0.tar.gz`，旧发布包也保留。
+功能与安装包验证见 [QA.md](qa-history.md)。包校验结果在 `test-artifacts/package-0.4.0-verification.json`，下载包哈希在 `release/0.4.0/SHA256SUMS.txt`。旧源码备份为 `test-artifacts/asr-research/source-0.3.0.tar.gz`，旧发布包也保留。
 
 上游资料：[Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR)、[sherpa-onnx Qwen3-ASR 支持与模型](https://k2-fsa.github.io/sherpa/onnx/qwen3-asr/pretrained.html)、[Whisper 模型](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/whisper/index.html)。Qwen ONNX 转换文件来自 ModelScope 的 `zengshuishui/Qwen3-ASR-onnx`，Whisper Turbo 文件来自 `csukuangfj/sherpa-onnx-whisper-turbo`；版本、大小和 SHA-256 固定在 `electron/model-assets.cjs`，不是从原版应用提取的私有控件。

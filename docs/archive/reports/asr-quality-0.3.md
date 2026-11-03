@@ -1,4 +1,6 @@
-最新结果见 [SpeakBridge 0.4.0 识别报告](ASR-QUALITY-0.4.md)。以下保留 0.3.0 历史验证。
+> 历史归档：保留当时的结论，不代表当前版本或服务状态。现行用法见[文档索引](../../README.md)，验收边界见[验证状态](../../verification.md)。文中测试产物路径相对于项目根目录；未纳入 Git 的本机证据不随源码提供。
+
+最新结果见 [SpeakBridge 0.4.0 识别报告](asr-quality-0.4.md)。以下保留 0.3.0 历史验证。
 
 # SpeakBridge 0.3.0 识别改进验证
 
@@ -46,6 +48,6 @@ npm run test:asr
 
 SenseVoice 和 VAD 通过 `sherpa-onnx-node@1.13.8` 运行，对应平台原生库也固定为 1.13.8。Whisper 保留 ONNX Runtime 1.22.0 以兼容 Intel Mac。识别与人声检测各在独立进程运行，避免 Windows 下不同版本的同名 ONNX DLL 相互影响；父进程退出会结束推理子进程。
 
-macOS Apple Silicon 的开发应用已验证；最终包的检查见 `QA.md`。Windows x64、Intel Mac 提供构建产物和架构检查，未在相应硬件上运行。未验证真实麦克风噪声环境、多人会议、所有语言以及原版云端准确率。
+macOS Apple Silicon 的开发应用已验证；最终包的检查见 `docs/archive/reports/qa-history.md`。Windows x64、Intel Mac 提供构建产物和架构检查，未在相应硬件上运行。未验证真实麦克风噪声环境、多人会议、所有语言以及原版云端准确率。
 
 上游：[SenseVoice](https://github.com/QwenAudio/SenseVoice)、[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)、[Silero VAD](https://github.com/snakers4/silero-vad)、[固定 SenseVoice ONNX 文件](https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/tree/2365baeacb507f821a0c8120fcee3d484dba7a07)。
