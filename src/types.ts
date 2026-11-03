@@ -15,10 +15,11 @@ export const engineNames: Record<string, string> = { api: 'API', soniox: 'Soniox
 export const modelNames: Record<Settings['localModel'], string> = { ensemble: '增强识别', 'qwen3-asr': 'Qwen3-ASR 1.7B', 'whisper-turbo': 'Whisper Turbo', sensevoice: 'SenseVoice', 'whisper-base': 'Whisper Base' };
 export type Segment = { id: string; text: string; translation: string; startMs: number; endMs: number; final: boolean; error?: string; translationError?: string; pending?: string };
 export type InputDiagnostics = { stage?: string; code?: string; role?: string; subrole?: string; selectionAvailable?: boolean; enabled?: boolean; editable?: boolean; readOnly?: boolean };
-export type DictationResult = { status: 'pending' | 'inserted' | 'sent' | 'retained' | 'cancelled' | 'empty'; text: string; targetName: string; message: string; retryable?: boolean; diagnostics?: InputDiagnostics };
-export type DictationPreferences = { holdKey: 'fn' | 'rightalt' | 'rightctrl' | 'off'; handsFreeShortcut: string };
+export type CleanupProvider = 'off' | 'ollama' | 'api' | 'codex' | 'claude' | 'deepseek' | 'harness';
+export type DictationResult = { status: 'pending' | 'inserted' | 'sent' | 'retained' | 'cancelled' | 'empty'; text: string; rawText?: string; cleanup?: { provider: CleanupProvider; status: 'applied' | 'unchanged' | 'failed'; message?: string; elapsedMs: number }; targetName: string; message: string; retryable?: boolean; diagnostics?: InputDiagnostics };
+export type DictationPreferences = { holdKey: 'fn' | 'rightalt' | 'rightctrl' | 'off'; handsFreeShortcut: string; cleanupProvider: CleanupProvider };
 export type DictationReadiness = { preferences: DictationPreferences; holdAvailable: boolean; handsFreeAvailable: boolean; inputAvailable: boolean; microphonePermission: string; modelInstalled: boolean; modelReady: boolean; message: string };
-export type DictationFeedback = { phase: 'selecting' | 'preparing' | 'listening' | 'finishing' | 'inserting' | 'done'; mode: 'hold' | 'handsfree'; targetName: string; message: string };
+export type DictationFeedback = { phase: 'selecting' | 'preparing' | 'listening' | 'finishing' | 'polishing' | 'inserting' | 'done'; mode: 'hold' | 'handsfree'; targetName: string; message: string };
 export type NotesLanguage = 'auto' | 'zh' | 'ja' | 'en';
 export type NotesStatus = { id: string; state: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'; message: string; startedAt?: number; stage?: string; received?: number; completed?: number; total?: number; language?: NotesLanguage };
 export type NotesPlan = { language: Exclude<NotesLanguage, 'auto'>; model: string; contextTokens: number; outputTokens: number; maxOutputTokens: number; inputTokens: number; timeoutMs: number; mode: 'direct' | 'chunked'; source: string };
@@ -44,7 +45,7 @@ export type Bridge = {
   insertArmedDictation(): Promise<void>;
   dictationLevel(level: number): void;
   cancelDictation(message?: string): Promise<void>;
-  copyDictation(): Promise<boolean>;
+  copyDictation(kind?: 'original'): Promise<boolean>;
   hideDictation(): Promise<void>;
   clearDictation(id: string): Promise<boolean>;
   audio(bytes: Uint8Array): void;

@@ -12,6 +12,7 @@ const { SonioxTranscriber } = require('./soniox.cjs');
 const { WhisperManager, LocalTranscriber, validateLocalSpeech } = require('./local-speech.cjs');
 const { detect, resolveEngines, TextRouter } = require('./providers.cjs');
 const { NativeInput, dictationPreferences, dictationSettings, deliverDictation } = require('./dictation.cjs');
+const { cleanupDictation } = require('./dictation-cleanup.cjs');
 
 app.setName('SpeakBridge');
 if (!app.isPackaged && process.env.SPEAKBRIDGE_DATA_DIR) app.setPath('userData', process.env.SPEAKBRIDGE_DATA_DIR);
@@ -264,6 +265,18 @@ async function toggleDictation(mode = 'handsfree') {
   escaped = globalShortcut.register('Escape', () => cancelDictation());
   try {
     preflight(context.settings);
+    const provider = preferences.cleanupProvider;
+    if (provider && provider !== 'off') {
+      const settings = { ...context.settings, textProvider: provider };
+      const key = provider === 'api' ? store.getKey() : '';
+      const capabilities = detect(settings, whisper);
+      resolveEngines(settings, key, capabilities, true, false);
+      const router = new TextRouter(settings, key, capabilities, provider);
+      context.cleanup = raw => {
+        feedback('polishing', '正在整理表达，可按 Esc 取消…');
+        return cleanupDictation(raw, { router, provider, settings, signal: context.signal });
+      };
+    }
     current = null; update();
     // Keep speech capture responsive while accessibility discovery runs. A
     // failed/unknown target can retain the transcript but can never be pasted.
@@ -447,10 +460,10 @@ app.whenReady().then(() => {
   ipcMain.on('dictation:level', (event, level) => {
     try { trusted(event); if (dictationContext && typeof level === 'number' && Number.isFinite(level)) publish('dictation-level', Math.max(0, Math.min(1, level))); } catch {}
   });
-  handle('dictation:copy', async () => {
+  handle('dictation:copy', async kind => {
     if (inputCommit) throw new Error('正在完成自动输入，请稍后复制。');
     if (current?.mode !== 'dictation' || status !== 'idle' || !current.dictation?.text) throw new Error('还没有可复制的听写文字。');
-    await clipboard.writeText(current.dictation.text); return true;
+    await clipboard.writeText(kind === 'original' ? current.dictation.rawText || current.dictation.text : current.dictation.text); return true;
   }, true);
   handle('dictation:hide', () => { if (dictationContext || dictationBusy) throw new Error('请先结束或取消听写。'); dictationWindow?.hide(); }, true);
   handle('dictation:clear', clearDictationResult, true);

@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('speakbridge', {
   insertArmedDictation: () => ipcRenderer.invoke('dictation:insert-armed'),
   dictationLevel: level => ipcRenderer.send('dictation:level', level),
   cancelDictation: message => ipcRenderer.invoke('dictation:cancel', message),
-  copyDictation: () => ipcRenderer.invoke('dictation:copy'),
+  copyDictation: kind => ipcRenderer.invoke('dictation:copy', kind),
   hideDictation: () => ipcRenderer.invoke('dictation:hide'),
   clearDictation: id => ipcRenderer.invoke('dictation:clear', id),
   audio: bytes => ipcRenderer.send('audio:chunk', bytes),

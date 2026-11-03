@@ -12,7 +12,7 @@ function deferred() { let resolve, reject; const promise = new Promise((yes, no)
 
 // Run the actual controller with inert Electron/native/ASR dependencies. No
 // window, microphone, helper process, keyboard event or user data is touched.
-function controller({ captures = [], inserts = [], engineStop = async () => {} } = {}) {
+function controller({ captures = [], inserts = [], engineStop = async () => {}, cleanupProvider = 'off', generate = async () => '' } = {}) {
   const events = [], timers = new Map(), shortcuts = new Set(); let timerID = 0;
   const app = new EventEmitter();
   Object.assign(app, { isPackaged: true, setName() {}, requestSingleInstanceLock: () => true,
@@ -28,13 +28,14 @@ function controller({ captures = [], inserts = [], engineStop = async () => {} }
   const mainPath = path.resolve(__dirname, '../electron/main.cjs');
   const context = vm.createContext({ console, process, Buffer, AbortController, setImmediate,
     setTimeout(fn, ms) { const id = ++timerID; timers.set(id, { fn, ms }); return id; }, clearTimeout(id) { timers.delete(id); },
-    __dirname: path.dirname(mainPath), __events: events, __native: native, __settings: { ...DEFAULT_SETTINGS, speechProvider: 'local', targetLanguage: 'off' },
+    __dirname: path.dirname(mainPath), __events: events, __native: native, __cleanupProvider: cleanupProvider, __settings: { ...DEFAULT_SETTINGS, speechProvider: 'local', targetLanguage: 'off' },
     require(name) {
       if (name === 'electron') return electron;
       if (name === './dictation.cjs') return dictation;
+      if (name === './dictation-cleanup.cjs') return require('../electron/dictation-cleanup.cjs');
       if (name === './core.cjs') return require('../electron/core.cjs');
       if (name === './local-speech.cjs') return { LocalTranscriber, validateLocalSpeech() {} };
-      if (name === './providers.cjs') return { detect: () => ({}), resolveEngines: () => ({ speech: 'local', text: 'off' }), TextRouter: class {} };
+      if (name === './providers.cjs') return { detect: () => ({}), resolveEngines: () => ({ speech: 'local', text: 'off' }), TextRouter: class { generate(...args) { return generate(...args); } } };
       if (name.startsWith('./')) return {};
       return require(name);
     },
@@ -42,7 +43,7 @@ function controller({ captures = [], inserts = [], engineStop = async () => {} }
   vm.runInContext(fs.readFileSync(mainPath, 'utf8') + `
     store = { settings: __settings, sessions: [] };
     whisper = { installed: () => true, ready: true, readyKey: 'sensevoice:auto' };
-    nativeInput = __native; preferences = { holdKey: 'off', handsFreeShortcut: 'CommandOrControl+Shift+D' };
+    nativeInput = __native; preferences = { holdKey: 'off', handsFreeShortcut: 'CommandOrControl+Shift+D', cleanupProvider: __cleanupProvider };
     mainWindow = { hide() { __events.push({ type: 'main-hide' }); }, show() { __events.push({ type: 'main-show' }); } };
     publish = (type, payload) => __events.push({ type, payload: payload === undefined ? undefined : JSON.parse(JSON.stringify(payload)) });
     showDictation = () => __events.push({ type: 'hud-show', phase: dictationFeedback?.phase });
@@ -58,6 +59,32 @@ function controller({ captures = [], inserts = [], engineStop = async () => {} }
     writes: () => events.filter(event => event.type === 'native' && event.op === 'insert'),
     kills: () => events.filter(event => event.type === 'helper-killed') };
 }
+
+test('local cleanup runs between final recognition and insertion, and cancellation blocks late output', async () => {
+  const capture = deferred(), generation = deferred(); let calls = 0;
+  const c = controller({ captures: [capture], cleanupProvider: 'ollama', generate: async (_, input) => {
+    calls++; assert.equal(JSON.parse(input).transcript, '嗯，明天讨论。'); return generation.promise;
+  } });
+  await c.api.toggleDictation(); await c.api.startRecording(); c.api.setWords('嗯，明天讨论。');
+  capture.resolve({ ok: true, appName: '目标编辑器' });
+  const stopping = c.api.stop(); await turn();
+  assert.equal(calls, 1); assert.equal(c.api.state().dictationFeedback.phase, 'polishing'); assert.equal(c.writes().length, 0);
+  c.api.cancelDictation(); await stopping;
+  assert.equal(c.api.state().current.dictation.status, 'cancelled');
+  generation.resolve('明天讨论。'); await turn(); assert.equal(c.writes().length, 0);
+});
+
+test('controller delivers the cleaned result once and keeps the original in memory', async () => {
+  const capture = deferred(), insert = deferred();
+  const c = controller({ captures: [capture], inserts: [insert], cleanupProvider: 'ollama', generate: async () => '明天讨论。' });
+  await c.api.toggleDictation(); await c.api.startRecording(); c.api.setWords('嗯，明天讨论。');
+  capture.resolve({ ok: true, appName: '目标编辑器' });
+  const stopping = c.api.stop(); await turn();
+  assert.deepEqual(c.writes().map(event => event.fields.text), ['明天讨论。']);
+  insert.resolve({ ok: true, verified: true }); await stopping;
+  const result = c.api.state().current.dictation;
+  assert.equal(result.rawText, '嗯，明天讨论。'); assert.equal(result.cleanup.status, 'applied'); assert.equal(result.status, 'inserted');
+});
 
 test('slow target discovery does not delay HUD or recording; final delivery waits for that target', async () => {
   const capture = deferred(), insert = deferred(); const c = controller({ captures: [capture], inserts: [insert] });

@@ -1,6 +1,7 @@
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const { cleanSpeechText } = require('./speech-text.cjs');
+const { CLEANUP_PROVIDERS } = require('./dictation-cleanup.cjs');
 const SHORTCUT = 'CommandOrControl+Shift+D';
 const HANDS_FREE_SHORTCUTS = [SHORTCUT, 'CommandOrControl+Alt+D', 'F8', 'off'];
 function dictationPreferences(value = {}, platform = process.platform) {
@@ -9,8 +10,10 @@ function dictationPreferences(value = {}, platform = process.platform) {
   // built-in MacBook keyboards (which often do not have a right Control key).
   const holdKey = value.holdKey ?? 'rightalt';
   const handsFreeShortcut = value.handsFreeShortcut ?? SHORTCUT;
+  const cleanupProvider = value.cleanupProvider ?? 'off';
   if (!keys.includes(holdKey) || !HANDS_FREE_SHORTCUTS.includes(handsFreeShortcut)) throw new Error('请选择有效的听写快捷键。');
-  return { holdKey, handsFreeShortcut };
+  if (!CLEANUP_PROVIDERS.includes(cleanupProvider)) throw new Error('请选择有效的听写整理方式。');
+  return { holdKey, handsFreeShortcut, cleanupProvider };
 }
 function dictationSettings(settings) {
   return { ...settings, speechProvider: 'local', audioSource: 'microphone', targetLanguage: 'off', viewMode: 'transcript' };
@@ -79,13 +82,15 @@ class NativeInput {
   dispose() { this.fail(new Error('系统输入已取消。')); }
 }
 async function deliverDictation(session, native, context, finalStatus) {
-  const text = dictationText(session.segments);
-  const result = { text, targetName: context.targetName || '', status: 'retained', message: '', retryable: false };
+  const rawText = dictationText(session.segments);
+  // Explicit recovery reuses the result already shown, without a second AI call.
+  const previous = session.dictation?.rawText === rawText ? session.dictation : null;
+  const result = { text: previous?.text || rawText, rawText, ...(previous?.cleanup ? { cleanup: previous.cleanup } : {}), targetName: context.targetName || '', status: 'retained', message: '', retryable: false };
   const cancelled = () => context.cancelled || context.signal?.aborted || context.isCurrent?.() === false;
   const cancellation = () => ({ ...result, status: 'cancelled', message: '已取消听写，未输入文字。' });
   if (cancelled()) return cancellation();
   if (finalStatus !== 'completed' || session.segments.some(row => row.error || !row.final)) return { ...result, message: '识别未完整结束，未自动输入；请检查后复制。' };
-  if (!text) return { ...result, status: 'empty', message: '没有识别到有效文字。' };
+  if (!rawText) return { ...result, status: 'empty', message: '没有识别到有效文字。' };
   // Target discovery runs alongside recording. Only the final write waits for
   // it; cancellation must not wait for a slow AX query or an old session.
   if (context.capture) {
@@ -107,11 +112,16 @@ async function deliverDictation(session, native, context, finalStatus) {
   if (context.diagnostics && !result.diagnostics) result.diagnostics = context.diagnostics;
   if (cancelled()) return cancellation();
   if (context.targetError) return { ...result, retryable: true, message: context.targetError };
+  if (context.cleanup && !previous?.cleanup) {
+    Object.assign(result, await context.cleanup(rawText));
+    if (cancelled()) return cancellation();
+    if (result.cleanup.status === 'failed') return { ...result, retryable: true, message: result.cleanup.message + '请检查后复制，或选择输入框填入原文。' };
+  }
   try {
     // From this point the native operation owns its clipboard transaction.
     // Do not kill it or relabel its actual result as a cancelled operation.
     context.onWillInsert?.();
-    const reply = await native.request('insert', { text });
+    const reply = await native.request('insert', { text: result.text });
     if (reply.diagnostics) result.diagnostics = reply.diagnostics;
     if (reply.ok) return { ...result, status: reply.verified === false ? 'sent' : 'inserted', message: reply.verified === false ? '已发出粘贴请求，请检查输入框，避免重复输入。' : '已输入到原输入框。' };
     return { ...result, retryable: reply.sent === 0, message: reply.error || '未能确认输入，文字已保留。' };

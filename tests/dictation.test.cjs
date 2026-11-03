@@ -10,7 +10,7 @@ test('hold and hands-free preferences validate independently for each OS', () =>
   assert.equal(dictationPreferences({}, 'darwin').holdKey, 'rightalt');
   assert.equal(dictationPreferences({ holdKey: 'fn' }, 'darwin').holdKey, 'fn', 'Explicit user choices survive upgrades');
   assert.equal(dictationPreferences({}, 'win32').holdKey, 'rightalt');
-  assert.deepEqual(dictationPreferences({ holdKey: 'off', handsFreeShortcut: 'off' }), { holdKey: 'off', handsFreeShortcut: 'off' });
+  assert.deepEqual(dictationPreferences({ holdKey: 'off', handsFreeShortcut: 'off' }), { holdKey: 'off', handsFreeShortcut: 'off', cleanupProvider: 'off' });
   assert.throws(() => dictationPreferences({ holdKey: 'fn' }, 'win32'), /快捷键/);
   assert.throws(() => dictationPreferences({ handsFreeShortcut: 'Control+A' }), /快捷键/);
 });

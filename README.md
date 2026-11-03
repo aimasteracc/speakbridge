@@ -24,13 +24,21 @@
 
 ## 直接运行
 
-本次验证产物在 `release/0.7.10/`（常规打包命令默认输出到 `release/`）：
+本次验证产物在 `release/0.7.11/`（常规打包命令默认输出到 `release/`）：
 
-- macOS Apple Silicon：`SpeakBridge-0.7.10-mac-arm64.zip`
-- macOS Intel：`SpeakBridge-0.7.10-mac-x64.zip`
-- Windows x64：`SpeakBridge-0.7.10-win-x64.zip`
+- macOS Apple Silicon：`SpeakBridge-0.7.11-mac-arm64.zip`
+- macOS Intel：`SpeakBridge-0.7.11-mac-x64.zip`
+- Windows x64：`SpeakBridge-0.7.11-win-x64.zip`
 
 Mac 解压后将 `SpeakBridge.app` 放入“应用程序”并打开；Windows 解压整个目录，运行 `SpeakBridge.exe`。不要只移动 exe，需保留同目录文件。Mac 使用本地 ad-hoc 签名，未使用开发者证书或 Apple 公证，适合内部试用；本地签名不保证升级后保留权限，公开分发前需要稳定的开发者签名与公证。
+
+## 0.7.11 可选听写整理
+
+- 在「语音输入 → 听写输出」选择原文直出、Ollama、API、Codex、Claude Code 或 Harness。升级默认保留原文直出；选择整理不会改变翻译与会议纪要引擎。
+- 整理在本次语音全部定稿后进行，尝试清理口头禅、意外重复和明确的自我纠正；不翻译、不回答口述中的问题。个人词典作为引用资料参与整理。
+- 原文与整理结果在本次听写窗口内分别保留、复制，不新增听写历史。最多等待 15 秒，可按 Esc 取消；取消后迟到的输出不能写入目标。整理失败或检查未通过时保留原文，由用户检查后复制或重新选择输入框填入。
+- 仅麦克风音频在本机识别；选用联网整理时，文字与词典会发送至所选服务并使用相应额度。Ollama 需启动服务、下载本地模型，并在设置里填写正确模型名。
+- 当前 8 条固定文字样例中，实际 Codex CLI 为 8/8 符合预期（每条约 3.6–5 秒），本机 `qwen3.5:2b` 只有 3/8。小样本只检查文字整理，不能代表语音识别准确率，也没有证明超过 Chris 或 Typeless。详见 [验证记录](docs/DICTATION-CLEANUP-0.7.11.md)。
 
 ## 0.7.10 多语言与长会议纪要
 

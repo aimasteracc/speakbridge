@@ -65,6 +65,7 @@ export default function App() {
     tick(); const timer = setInterval(tick, 1000); return () => clearInterval(timer);
   }, [state.status, state.session?.id, state.session?.durationMs]);
   const closeDialog = useCallback(() => setSelected(null), []);
+  function savedSettings(value: Settings) { setSettings(value); setBoot(previous => previous ? { ...previous, settings: value } : previous); }
   async function endSession() {
     if (dictationJob.current) return finishDictationJob();
     try { await capture.current?.stop(); capture.current = null; await window.speakbridge.stop(); }
@@ -80,7 +81,7 @@ export default function App() {
         capture.current = recorder;
         await recorder.prepare(settings);
       }
-      await window.speakbridge.saveSettings(settings);
+      savedSettings(await window.speakbridge.saveSettings(settings));
       await window.speakbridge.start({ demo, settings });
       capture.current?.begin();
     } catch (error) { await capture.current?.stop(); capture.current = null; notify(cleanError(error)); }
@@ -145,7 +146,7 @@ export default function App() {
     setSessions(next); setSelected(previous => previous ? next.find(row => row.id === previous.id) || null : null);
     notify(notesOnly ? `已删除 ${ids.length} 份纪要，转写和翻译已保留` : `已删除 ${ids.length} 条会话`);
   }
-  async function saveDictionary(next: string[]) { if (!settings) return; setSaveBusy(true); try { setSettings(await window.speakbridge.saveSettings({ ...settings, dictionary: next })); setWord(''); notify('个人词典已更新'); } catch (error) { notify(cleanError(error)); } finally { setSaveBusy(false); } }
+  async function saveDictionary(next: string[]) { if (!settings) return; setSaveBusy(true); try { savedSettings(await window.speakbridge.saveSettings({ ...settings, dictionary: next })); setWord(''); notify('个人词典已更新'); } catch (error) { notify(cleanError(error)); } finally { setSaveBusy(false); } }
   if (!boot || !settings) return <div className="loading-screen">{loadError ? <><h2>无法载入本地数据</h2><p>{loadError}</p></> : <><AudioLines size={38} /><p>正在打开声桥…</p></>}</div>;
   const change = <K extends keyof Settings>(key: K, value: Settings[K]) => setSettings({ ...settings, [key]: value });
   const recorded = sessions.filter(s => !s.demo);
@@ -158,7 +159,7 @@ export default function App() {
       <div className="sidebar-bottom"><button className={'nav-item appearance-nav ' + (page === 'appearance' ? 'active' : '')} onClick={() => setPage('appearance')}><Palette size={20} aria-hidden="true" /><span>外观与配色</span></button><div className="local-card"><span className="local-card-icon"><Headphones size={20} /></span><strong>听懂每一种声音</strong><p>开会、学习、看视频<br />让语言不再是距离。</p><button onClick={() => beginSession(true)} disabled={active || preparing}>体验演示 <ArrowUpRight size={14} /></button></div><button className={'nav-item settings-nav ' + (page === 'settings' ? 'active' : '')} onClick={() => setPage('settings')}><Settings2 size={19} /><span>设置</span>{(settings.hasKey || settings.hasSonioxKey) && <span className="configured-dot" />}</button><div className="workspace"><span className="workspace-avatar">声</span><div><strong>本地工作空间</strong><span>v{boot.appVersion} · {boot.platform === 'darwin' ? 'macOS' : 'Windows'}</span></div><ShieldCheck size={17} /></div></div>
     </aside>
     <main className={'main-content ' + (active && page === 'realtime' ? 'recording-layout' : '')}>
-      {page === 'dictation' && <DictationPage boot={boot} settings={settings} state={state} preparing={preparing} notify={notify} onStop={endSession} onSettings={() => setPage('settings')} onShortcuts={() => setPage('shortcuts')} />}
+      {page === 'dictation' && <DictationPage boot={boot} settings={boot.settings} state={state} preparing={preparing} notify={notify} onStop={endSession} onSettings={() => setPage('settings')} onShortcuts={() => setPage('shortcuts')} />}
       {page === 'realtime' && <>
         <header className="page-header"><div><span className="eyebrow">REAL-TIME TRANSLATION</span><h1>实时翻译</h1><p>边说边转写，让每一句话都被听懂。</p></div><span className="service-status"><i />{settings.speechProvider === 'soniox' ? 'Soniox · 付费转写' : settings.speechProvider === 'api' || (settings.speechProvider === 'auto' && settings.hasKey) ? 'API 转写' : '本地 ' + modelNames[settings.localModel]}</span></header>
         <div className="mode-grid" role="group" aria-label="显示方式">
@@ -182,7 +183,7 @@ export default function App() {
       {page === 'meetings' && <><header className="page-header"><div><span className="eyebrow">LESS NOTE-TAKING, MORE LISTENING</span><h1>会议纪要</h1><p>从完整对话中，找到真正重要的事。</p></div></header><div className="info-card"><ClipboardList size={22} /><div><strong>把转写，整理成下一步行动。</strong><p>打开一条会话，切换到「会议纪要」，即可生成讨论要点、决定和待办。</p></div></div><HistoryList sessions={sessions} onOpen={setSelected} onStar={star} onDelete={removeNotes} onDeleteMany={ids => removeMany(ids, true)} deleteMode="notes" busyId={active ? state.session?.id : undefined} heading="选择一场会话" full /></>}
       {page === 'dictionary' && <><header className="page-header"><div><span className="eyebrow">WORDS THAT MATTER TO YOU</span><h1>个人词典</h1><p>让声桥更懂你的专业术语、人名和产品名称。</p></div></header><div className="dictionary-card"><label htmlFor="new-word">添加常用词</label><form onSubmit={e => { e.preventDefault(); if (word.trim()) saveDictionary([...settings.dictionary, word.trim()]); }}><input id="new-word" value={word} onChange={e => setWord(e.target.value)} maxLength={80} placeholder="例如：SpeakBridge、需求评审、田中さん" disabled={active} /><button className="primary compact" disabled={!word.trim() || saveBusy || active}><Plus size={17} />添加</button></form><p>这些词用于 Qwen3-ASR 本地识别、API 识别和翻译提示。增强模式的 Qwen3-ASR 分支也会参考词典。以上两种模式的词典合计最多 256 字节（约 85 个汉字），请优先放重要名称。SenseVoice / Whisper 本地识别不使用词典；词典是提示，不会强制替换原文。</p></div><div className="section-heading"><h2>我的词条<span className="count">{settings.dictionary.length} / 100</span></h2></div>{settings.dictionary.length ? <div className="word-list">{settings.dictionary.map(text => <span className="word-chip" key={text}>{text}<button aria-label={'删除词条 ' + text} disabled={saveBusy || active} onClick={() => saveDictionary(settings.dictionary.filter(t => t !== text))}><X size={15} /></button></span>)}</div> : <EmptyState title="从一个熟悉的词开始" detail="添加领域术语，让每一次识别更准确。" />}</>}
       {page === 'shortcuts' && <><header className="page-header"><div><span className="eyebrow">A LITTLE FASTER, A LOT EASIER</span><h1>快捷键</h1><p>不打断思路，也能掌控对话。</p></div></header><DictationShortcuts boot={boot} disabled={active || preparing} notify={notify} /><div className="shortcut-list"><div><span><Mic size={19} />开始 / 结束会话</span><kbd>{boot.platform === 'darwin' ? '⌘' : 'Ctrl'} + Shift + Space</kbd></div><div><span><Subtitles size={19} />显示 / 隐藏悬浮字幕</span><kbd>{boot.platform === 'darwin' ? '⌘' : 'Ctrl'} + Shift + L</kbd></div><div><span><X size={19} />关闭会话详情</span><kbd>Esc</kbd></div></div><div className="info-card"><CircleHelp size={20} /><p>{boot.shortcutAvailable ? '录音与字幕快捷键在其他应用处于前台时也可使用。首次录音仍需允许系统权限。' : '录音快捷键已被其他应用占用。请使用页面上的开始按钮。'}</p></div></>}
-      {page === 'settings' && (active ? <div className="info-card"><Mic size={22} /><div><h2>会话进行中</h2><p>结束会话后即可修改服务和音频设置。</p><button className="small-button" onClick={() => setPage('realtime')}>返回实时翻译</button></div></div> : <SettingsPage settings={settings} onChange={setSettings} onSaved={setSettings} notify={notify} dataDirectory={boot.dataDirectory} />)}
+      {page === 'settings' && (active ? <div className="info-card"><Mic size={22} /><div><h2>会话进行中</h2><p>结束会话后即可修改服务和音频设置。</p><button className="small-button" onClick={() => setPage('realtime')}>返回实时翻译</button></div></div> : <SettingsPage cleanupProvider={boot.dictation.preferences.cleanupProvider} settings={settings} onChange={setSettings} onSaved={savedSettings} notify={notify} dataDirectory={boot.dataDirectory} />)}
     </main>
     {toast && <div className="toast" role="status"><span>{toast}</span><button aria-label="关闭提示" onClick={() => setToast('')}><X size={16} /></button></div>}
     {selected && <SessionDialog session={selected} onClose={closeDialog} onUpdate={updateSession} onDelete={remove} onDeleteNotes={removeNotes} disabled={active && state.session?.id === selected.id} initialTab={page === 'meetings' ? 'notes' : 'transcript'} notify={notify} />}

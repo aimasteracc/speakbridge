@@ -2,12 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, AudioLines, Check, CheckCircle2, ChevronDown, Copy, Keyboard, LoaderCircle, Mic, Settings2, ShieldCheck, Square, X } from 'lucide-react';
 import { LiveText } from './LiveText';
 import { DeleteButton } from './DeleteButton';
-import { duration, modelNames, type Bootstrap, type DictationFeedback, type DictationPreferences, type DictationReadiness, type SessionState, type Settings } from './types';
+import { duration, modelNames, type CleanupProvider, type Bootstrap, type DictationFeedback, type DictationPreferences, type DictationReadiness, type SessionState, type Settings } from './types';
 
 const errorText = (error: unknown) => String(error instanceof Error ? error.message : error).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '');
 const holdName = (key: DictationPreferences['holdKey'], platform: string) => ({ fn: 'fn', rightalt: platform === 'darwin' ? '右 Option' : '右 Alt', rightctrl: '右 Ctrl', off: '未启用' })[key];
 const shortcutName = (key: string, platform: string) => key === 'off' ? '未启用' : key.replace('CommandOrControl', platform === 'darwin' ? '⌘' : 'Ctrl').replace(/\+/g, ' + ');
 function words(state: SessionState) { return state.session?.mode === 'dictation' ? state.session.segments.map(row => row.text).filter(Boolean).join(' ') : ''; }
+const cleanupNames: Record<CleanupProvider, string> = { off: '原文直出 · 最快', ollama: '智能整理 · 本地 Ollama', api: '智能整理 · API', codex: '智能整理 · Codex', claude: '智能整理 · Claude Code', deepseek: '智能整理 · DeepSeek Harness', harness: '智能整理 · 自定义 Harness' };
+function cleanupDescription(provider: CleanupProvider, settings: Settings) {
+  if (provider === 'off') return '识别后直接输入，不调用文字模型。';
+  if (provider === 'ollama') return `使用本机 Ollama 的 ${settings.ollamaModel}。需先启动服务并下载这个模型，整理效果取决于模型能力。`;
+  if (provider === 'api') return `识别文字与词典将发送至 ${new URL(settings.baseUrl).host}，使用 ${settings.translationModel}，按服务用量收费。`;
+  if (provider === 'codex') return '识别文字与词典将通过 Codex CLI 发送至 OpenAI，使用已有登录与额度。';
+  if (provider === 'claude') return '识别文字与词典将通过 Claude Code 发送至其配置的模型服务，使用已有登录与额度。';
+  return '识别文字与词典将交给已配置的 Harness，数据去向和费用取决于其模型服务设置。';
+}
 
 function useDictationReadiness(boot: Bootstrap, active: boolean) {
   const [readiness, setReadiness] = useState(boot.dictation);
@@ -61,8 +70,17 @@ export function DictationPage({ boot, settings, state, preparing, notify, onStop
   const [checkMessage, setCheckMessage] = useState('');
   const [micVerified, setMicVerified] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [savingCleanup, setSavingCleanup] = useState(false);
+  const [cleanupError, setCleanupError] = useState('');
   const session = state.session?.mode === 'dictation' ? state.session : null;
   const { preferences } = readiness;
+  const cleanupProvider = preferences.cleanupProvider || 'off';
+  async function changeCleanup(provider: CleanupProvider) {
+    setSavingCleanup(true); setCleanupError('');
+    try { setReadiness(await window.speakbridge.saveDictationPreferences({ ...preferences, cleanupProvider: provider })); notify('听写输出方式已更新'); }
+    catch (error) { setCleanupError(errorText(error)); }
+    finally { setSavingCleanup(false); }
+  }
   const microphoneReady = !['denied', 'restricted'].includes(readiness.microphonePermission) && (readiness.microphonePermission === 'granted' || micVerified);
   const holdEnabled = preferences.holdKey !== 'off';
   const shortcutReady = holdEnabled ? readiness.holdAvailable : readiness.handsFreeAvailable;
@@ -112,11 +130,18 @@ export function DictationPage({ boot, settings, state, preparing, notify, onStop
       {preferences.holdKey !== 'off' && !readiness.holdAvailable && readiness.handsFreeAvailable && readiness.inputAvailable && microphoneReady && readiness.modelInstalled && <p className="dictation-setup-message">按住说话尚未就绪，可以先用 {shortcutName(preferences.handsFreeShortcut, boot.platform)} 免持听写。</p>}
       <button className="small-button" disabled={active || !readiness.inputAvailable} onClick={() => window.speakbridge.armDictationInput('test').catch(error => notify(errorText(error)))}><Keyboard size={15} />测试自动输入（不录音）</button>
     </section>
-    {session && <section className="dictation-result" aria-label="听写结果"><div className="section-heading"><h2>{inserting ? '正在输入…' : active ? state.status === 'stopping' ? '正在完成听写…' : '正在聆听' : '这次听写'}</h2><span className="muted">{session.dictation?.targetName || '手动复制'}</span></div><div className="dictation-text"><LiveText text={active ? words(state) : session.dictation?.text || ''} settled={!active} /></div><p className="dictation-feedback" role="status">{inserting ? '正在完成输入，请稍等。' : session.dictation?.message}</p>
+    <section className="dictation-cleanup" aria-label="听写输出方式" aria-busy={savingCleanup}>
+      <div className="dictation-cleanup-heading"><div><h2><label htmlFor="dictation-cleanup-provider">听写输出</label></h2><p>尝试清理口头禅、重复和明确的自我纠正，原文始终保留。</p></div><select id="dictation-cleanup-provider" aria-describedby="dictation-cleanup-description" disabled={active || savingCleanup} value={cleanupProvider} onChange={event => void changeCleanup(event.target.value as CleanupProvider)}>{Object.entries(cleanupNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+      <p id="dictation-cleanup-description">{cleanupDescription(cleanupProvider, settings)}</p>
+      {cleanupProvider !== 'off' && <p>结束后会多一步整理，最多等待 15 秒；失败时保留原文供你检查。整理不能找回漏听的内容。<button className="text-button" disabled={active || savingCleanup} onClick={onSettings}>配置整理引擎</button></p>}
+      {cleanupError && <p className="error-banner" role="alert">{cleanupError}</p>}
+    </section>
+    {session && <section className="dictation-result" aria-label="听写结果" aria-busy={active}><div className="section-heading"><h2>{inserting ? '正在输入…' : boot.dictationFeedback?.phase === 'polishing' ? '正在整理表达…' : active ? state.status === 'stopping' ? '正在完成听写…' : '正在聆听' : '这次听写'}</h2><span className="muted">{session.dictation?.targetName || '手动复制'}</span></div><div className="dictation-text"><LiveText text={active ? words(state) : session.dictation?.text || ''} settled={!active} /></div><p className="dictation-feedback" role="status">{inserting ? '正在完成输入，请稍等。' : boot.dictationFeedback?.phase === 'polishing' ? '正在整理表达，可随时取消。' : session.dictation?.message}</p>
+      {!active && session.dictation?.cleanup && <details className="dictation-original"><summary>{session.dictation.cleanup.status === 'applied' ? '已整理 · 查看识别原文' : session.dictation.cleanup.status === 'unchanged' ? '已检查，原文无需整理' : '整理未完成 · 查看识别原文'}</summary><p>{session.dictation.rawText}</p><button className="small-button" onClick={() => window.speakbridge.copyDictation('original').then(() => notify('识别原文已复制')).catch(error => notify(errorText(error)))}><Copy size={15} aria-hidden="true" />复制识别原文</button></details>}
       {!active && session.dictation?.diagnostics && ['retained', 'sent'].includes(session.dictation.status) && <details className="dictation-diagnostics"><summary>查看输入诊断</summary><p>目标应用：{session.dictation.targetName || '未确认'}<br />阶段：{session.dictation.diagnostics.stage === 'capture' ? '定位输入框' : '写入文字'}<br />输入控件：{session.dictation.diagnostics.role || '未取得'}{session.dictation.diagnostics.subrole ? ` / ${session.dictation.diagnostics.subrole}` : ''}<br />结果代码：{session.dictation.diagnostics.code || 'UNKNOWN'}</p></details>}
       <div className="dictation-actions">{state.status === 'recording' && <button className="primary compact" onClick={onStop}><Square size={15} />结束听写</button>}{active && !inserting && <button className="small-button" onClick={() => window.speakbridge.cancelDictation().catch(error => notify(errorText(error)))}><X size={15} />取消</button>}{!active && session.dictation?.retryable && <button className="primary compact" onClick={() => window.speakbridge.armDictationInput('retry').catch(error => notify(errorText(error)))}><ArrowRight size={15} />选择输入框并填入</button>}{!active && session.dictation?.text && <button className="small-button" onClick={() => window.speakbridge.copyDictation().then(() => notify('听写文字已复制')).catch(error => notify(errorText(error)))}><Copy size={15} />复制文字</button>}{!active && <DeleteButton key={session.id} label="清除这次听写结果" description="清除声桥中的这次结果，已输入其他应用的文字会保留。" onDelete={async () => { await window.speakbridge.clearDictation(session.id); notify('这次听写结果已清除'); }} />}</div></section>}
     {state.error && <div className="error-banner" role="alert">{state.error}</div>}
-    <div className="dictation-privacy"><ShieldCheck size={17} /><div><strong>{modelNames[settings.localModel]} · 仅在本机识别</strong><p>仅使用麦克风，不保存听写历史，不自动按回车发送。每次最长 2 分钟。</p></div><button className="text-button" disabled={active} onClick={onSettings}>语音模型设置</button></div>
+    <div className="dictation-privacy"><ShieldCheck size={17} /><div><strong>{modelNames[settings.localModel]} · 音频仅在本机识别</strong><p>仅使用麦克风，不保存听写历史，不自动按回车发送。每次最长 2 分钟。{cleanupProvider !== 'off' && cleanupDescription(cleanupProvider, settings)}</p></div><button className="text-button" disabled={active} onClick={onSettings}>语音模型设置</button></div>
   </>;
 }
 
@@ -124,7 +149,7 @@ export function DictationOverlay() {
   const [state, setState] = useState<SessionState>({ status: 'idle', session: null, error: '' });
   const [feedback, setFeedback] = useState<DictationFeedback>();
   const [platform, setPlatform] = useState('darwin');
-  const [preferences, setPreferences] = useState<DictationPreferences>({ holdKey: 'rightalt', handsFreeShortcut: 'CommandOrControl+Shift+D' });
+  const [preferences, setPreferences] = useState<DictationPreferences>({ holdKey: 'rightalt', handsFreeShortcut: 'CommandOrControl+Shift+D', cleanupProvider: 'off' });
   const [message, setMessage] = useState('');
   const [level, setLevel] = useState(0);
   const [now, setNow] = useState(Date.now());
@@ -155,12 +180,12 @@ export function DictationOverlay() {
   const phase = feedback?.phase || (state.status === 'connecting' ? 'preparing' : state.status === 'recording' ? 'listening' : state.status === 'stopping' ? 'finishing' : 'done');
   const active = phase !== 'done';
   const result = state.session?.mode === 'dictation' ? state.session.dictation : undefined;
-  const working = phase === 'preparing' || phase === 'finishing' || phase === 'inserting';
-  const title = phase === 'selecting' ? '点进目标输入框' : phase === 'preparing' ? '正在准备…' : phase === 'listening' ? '正在聆听' : phase === 'finishing' ? '正在完成…' : phase === 'inserting' ? '正在输入…' : result?.status === 'inserted' ? '已输入' : result?.status === 'sent' ? '请检查输入结果' : result?.status === 'retained' ? '文字已保留' : result?.status === 'cancelled' ? '已取消' : result?.status === 'empty' ? '未听到语音' : '听写结束';
+  const working = phase === 'preparing' || phase === 'finishing' || phase === 'polishing' || phase === 'inserting';
+  const title = phase === 'selecting' ? '点进目标输入框' : phase === 'preparing' ? '正在准备…' : phase === 'listening' ? '正在聆听' : phase === 'finishing' ? '正在完成…' : phase === 'polishing' ? '正在整理…' : phase === 'inserting' ? '正在输入…' : result?.status === 'inserted' ? '已输入' : result?.status === 'sent' ? '请检查输入结果' : result?.status === 'retained' ? '文字已保留' : result?.status === 'cancelled' ? '已取消' : result?.status === 'empty' ? '未听到语音' : '听写结束';
   const fullText = (phase === 'preparing' || phase === 'selecting' ? '' : active ? words(state) : result?.text) || '';
   const tail = Array.from(fullText).slice(-90).join('');
   const hint = feedback?.mode === 'hold' ? `松开 ${holdName(preferences.holdKey, platform)} 输入` : `${shortcutName(preferences.handsFreeShortcut, platform)} 结束`;
-  const detail = message || state.error || (phase === 'done' ? result?.message || feedback?.message : phase === 'listening' ? `${feedback?.targetName ? feedback.targetName + ' · ' : ''}${hint}` : feedback?.message) || '内容仅在本机处理';
+  const detail = message || state.error || (phase === 'done' ? result?.message || feedback?.message : phase === 'listening' ? `${feedback?.targetName ? feedback.targetName + ' · ' : ''}${hint}` : feedback?.message) || '使用快捷键开始听写';
   return <div className={'dictation-hud phase-' + phase}>
     <div className="dictation-hud-heading"><span className="dictation-hud-status" role="status">{working ? <LoaderCircle size={17} className="spin" /> : result?.status === 'inserted' && !active ? <Check size={17} /> : <Mic size={17} />}{title}</span>
       {phase === 'listening' && <><div className="dictation-wave" aria-label="麦克风音量">{[.4, .65, .88, 1, .8, .6, .35].map((weight, index) => <i key={index} style={{ height: 3 + Math.min(19, Math.sqrt(level) * 52) * weight }} />)}</div><time>{duration(state.session ? now - state.session.startedAt : 0)}</time></>}

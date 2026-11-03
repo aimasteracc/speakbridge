@@ -1,6 +1,6 @@
 {
   "name": "speakbridge",
-  "version": "0.7.10",
+  "version": "0.7.11",
   "private": true,
   "type": "module",
   "description": "声桥 SpeakBridge — 跨平台实时转写、翻译与桌面字幕",
