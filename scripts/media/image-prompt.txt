@@ -1,0 +1,14 @@
+Use case: infographic-diagram.
+Asset type: finished Chinese quick-start overview image for the README of an existing independent desktop app, SpeakBridge (声桥). This is a user onboarding infographic, not a redesigned application screenshot.
+Create a polished, highly legible landscape image approximately 2400 by 1500 with restrained editorial design. Warm off-white background, dark charcoal typography, soft sage green panels and accents, generous whitespace, crisp simple original line illustrations of a microphone, text page and keyboard. No photos, no invented app UI, no third-party logos, no decorative gibberish. Professional and welcoming, clear hierarchy, readable Chinese typography.
+At top large exact title: "声桥 SpeakBridge"
+Below title exact subtitle: "从说话到文字，再到会议纪要"
+Middle: three numbered steps connected left to right by understated arrows, each clearly separated:
+"01 配置引擎" with supporting text "本地识别 + DeepSeek 文字处理"
+"02 开始记录" with supporting text "麦克风 / 系统音频"
+"03 生成纪要" with supporting text "中文 · 日文 · 英文"
+Below these steps a broad contrasting soft green strip with heading "跨应用听写", then four steps with a simple arrow between each: "点击输入框" → "按快捷键" → "说话" → "再按一次，等待填入".
+Inside or just below this strip clearly typeset the exact keyboard hint: "Mac：⌘ + Shift + D    Windows：Ctrl + Shift + D"
+Next line, calm emphasis: "默认原文直出 · 不自动发送消息"
+Small but readable footer: "云端服务可能收费；数据按所选引擎发送。"
+Keep all Chinese copy exactly as specified, with no extra text and no accuracy claims. Do not imply live cloud calls have been verified or the app is entirely free. The result should be an appealing finished instructional image people can read in a repository.

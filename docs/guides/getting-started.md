@@ -2,6 +2,8 @@
 
 [返回文档索引](../README.md)
 
+希望先看操作过程？从[流程图与中文上手视频](video-tour.md)开始。
+
 ## 获取与运行
 
 声桥面向 **macOS 13+（Apple Silicon / Intel）** 与 **Windows 10 / 11 x64**。macOS 系统音频采集建议使用 14.2+。平台运行证据见[验证状态](../verification.md)，不能仅凭构建成功判断设备兼容性。

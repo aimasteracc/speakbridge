@@ -1,0 +1,63 @@
+{
+  "version": "0.7.11",
+  "width": 1920,
+  "height": 1080,
+  "fps": 24,
+  "durationSeconds": 113.888,
+  "audio": "none",
+  "burnedInChineseCaptions": true,
+  "syntheticData": true,
+  "simulatedModelAndInputResults": true,
+  "realUserDataAccessed": false,
+  "externalRequests": 0,
+  "pageErrors": [],
+  "chapters": [
+    {
+      "start": 0,
+      "title": "开场"
+    },
+    {
+      "start": 5.125,
+      "title": "配置 DeepSeek"
+    },
+    {
+      "start": 30.754,
+      "title": "记录会议"
+    },
+    {
+      "start": 47.305,
+      "title": "生成会议纪要"
+    },
+    {
+      "start": 67.407,
+      "title": "跨应用听写"
+    },
+    {
+      "start": 91.389,
+      "title": "管理历史"
+    },
+    {
+      "start": 102.334,
+      "title": "配色与完成"
+    }
+  ],
+  "encoded": {
+    "durationSeconds": 113.875,
+    "bytes": 2680516,
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1920,
+        "height": 1080,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1"
+      }
+    ]
+  },
+  "provenance": {
+    "image": "Built-in imagegen; prompt: scripts/media/image-prompt.txt",
+    "video": "Project React UI + in-memory synthetic adapter + HTML stage + Chromium + ffmpeg",
+    "artwork": "Project build/icon.svg and existing Lucide UI icons; no third-party footage, music, voice or font files"
+  }
+}

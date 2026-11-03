@@ -6,6 +6,7 @@
 
 | 你要做什么 | 阅读入口 |
 | --- | --- |
+| 先看图片和操作视频了解使用流程 | [图片与视频上手指南](guides/video-tour.md) |
 | 安装、首次启动、录制会议、切换配色 | [开始使用](guides/getting-started.md) |
 | 配置 DeepSeek API、本地模型、Codex / Claude / Harness | [引擎与连接配置](guides/engines.md) |
 | 用快捷键说话，并自动填入其他应用 | [跨应用听写](guides/dictation.md) |

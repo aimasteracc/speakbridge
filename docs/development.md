@@ -65,6 +65,8 @@ node tests/dictation-cleanup-live.cjs ollama YOUR_LOCAL_MODEL
 
 文档修改检查链接、索引、命令及默认值引用、敏感信息和 diff。没有产品行为变化时，无需重做音频或付费服务调用。通过的验证与未完成项统一记录到[验证状态](verification.md)。
 
+图片与教程视频的来源、隔离范围和重制命令见[媒体维护说明](guides/video-tour.md#素材来源与维护)。这些脚本只运行教程夹具，不进行真实设备或云端模型验收。
+
 ## 打包与 CI
 
 | 命令 | 产物 |
