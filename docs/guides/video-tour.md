@@ -6,7 +6,7 @@
 
 ## 观看视频
 
-https://github.com/user-attachments/assets/a7f3ffc8-fce0-4059-9984-a6cbb371f82d
+https://github.com/user-attachments/assets/7f3f92f2-efd2-4878-82a8-e021296a3bf9
 
 **[观看／下载中文上手视频（MP4）](../media/speakbridge-quickstart-zh.mp4)** · [本地播放页](../media/watch.html) · [SRT 字幕](../media/speakbridge-quickstart-zh.srt) · [VTT 字幕](../media/speakbridge-quickstart-zh.vtt)
 

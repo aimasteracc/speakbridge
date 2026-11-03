@@ -8,7 +8,7 @@
 
 点击下方播放，**1 分 54 秒**了解配置、会议纪要、跨应用听写、历史管理与配色。
 
-https://github.com/user-attachments/assets/a7f3ffc8-fce0-4059-9984-a6cbb371f82d
+https://github.com/user-attachments/assets/7f3f92f2-efd2-4878-82a8-e021296a3bf9
 
 视频带中文字幕和点击提示。画面来自当前界面，使用虚构资料及模拟服务；不代表真实 API 或原生输入验收。
 
@@ -32,7 +32,7 @@ https://github.com/user-attachments/assets/a7f3ffc8-fce0-4059-9984-a6cbb371f82d
 
 ## 当前版本与获取方式
 
-源码版本 **0.7.11**。截至 **2026-11-03**，本仓库为私有源码仓库，尚未发布 GitHub Release 或安装包下载。本机打包结果与用户正在运行的应用不一定相同，详见[验证状态](docs/verification.md)。
+源码版本 **0.7.11**。本仓库于 **2026-11-04** 公开，采用 MIT 许可证；尚未发布 GitHub Release 或安装包下载。本机打包结果与用户正在运行的应用不一定相同，详见[验证状态](docs/verification.md)。
 
 支持目标：macOS 13+（Apple Silicon / Intel）、Windows 10 / 11 x64。Mac 本机包使用 ad-hoc 签名，尚未公证；Windows 与 Intel Mac 的当前版本仍需实机验收。
 
