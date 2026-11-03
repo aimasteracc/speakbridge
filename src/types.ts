@@ -7,6 +7,7 @@ export type Settings = {
   microphoneId: string; viewMode: 'transcript' | 'subtitle'; silenceMs: number;
   speechThreshold: number; subtitleFontSize: number; dictionary: string[];
   hasKey: boolean; hasSonioxKey: boolean; canEncrypt: boolean | null; keyError?: string; sonioxKeyError?: string;
+  notesContextTokens: number; notesOutputTokens: number; notesTimeoutSeconds: number;
 };
 export type Engines = { speech: string; text: string };
 export type Capabilities = { codex: string; claude: string; deepseek: string; harness: string; localInstalled: boolean; localReady: boolean; localModels: Record<Settings['localModel'], boolean> };
@@ -18,7 +19,10 @@ export type DictationResult = { status: 'pending' | 'inserted' | 'sent' | 'retai
 export type DictationPreferences = { holdKey: 'fn' | 'rightalt' | 'rightctrl' | 'off'; handsFreeShortcut: string };
 export type DictationReadiness = { preferences: DictationPreferences; holdAvailable: boolean; handsFreeAvailable: boolean; inputAvailable: boolean; microphonePermission: string; modelInstalled: boolean; modelReady: boolean; message: string };
 export type DictationFeedback = { phase: 'selecting' | 'preparing' | 'listening' | 'finishing' | 'inserting' | 'done'; mode: 'hold' | 'handsfree'; targetName: string; message: string };
-export type Session = { id: string; title: string; startedAt: number; endedAt?: number; durationMs: number; audioSource: AudioSource; sourceLanguage: string; targetLanguage: string; demo: boolean; segments: Segment[]; notes: string; starred: boolean; status: string; engines?: Engines; speechModel?: Settings['localModel']; mode?: 'dictation'; dictation?: DictationResult };
+export type NotesLanguage = 'auto' | 'zh' | 'ja' | 'en';
+export type NotesStatus = { id: string; state: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'; message: string; startedAt?: number; stage?: string; received?: number; completed?: number; total?: number; language?: NotesLanguage };
+export type NotesPlan = { language: Exclude<NotesLanguage, 'auto'>; model: string; contextTokens: number; outputTokens: number; maxOutputTokens: number; inputTokens: number; timeoutMs: number; mode: 'direct' | 'chunked'; source: string };
+export type Session = { id: string; title: string; startedAt: number; endedAt?: number; durationMs: number; audioSource: AudioSource; sourceLanguage: string; targetLanguage: string; demo: boolean; segments: Segment[]; notes: string; notesLanguage?: NotesLanguage; notesError?: string; notesGeneratedAt?: number; starred: boolean; status: string; engines?: Engines; speechModel?: Settings['localModel']; mode?: 'dictation'; dictation?: DictationResult };
 export type SessionState = { status: 'idle' | 'connecting' | 'recording' | 'stopping'; session: Session | null; error: string };
 export type Bootstrap = { settings: Settings; sessions: Session[]; state: SessionState; platform: string; osVersion: string; appVersion: string; shortcutAvailable: boolean; dictationShortcutAvailable: boolean; dictation: DictationReadiness; dictationFeedback?: DictationFeedback; dataDirectory: string; capabilities: Capabilities };
 export type BridgeEvent = { type: string; payload: unknown };
@@ -53,7 +57,10 @@ export type Bridge = {
   exportSession(id: string, format: string): Promise<boolean>;
   copySession(id: string): Promise<boolean>;
   retryTranslation(id: string): Promise<Session>;
-  makeNotes(id: string): Promise<Session>;
+  makeNotes(id: string, language?: NotesLanguage): Promise<Session>;
+  notesStatus(id: string): Promise<NotesStatus>;
+  notesPlan(id: string, language?: NotesLanguage): Promise<NotesPlan>;
+  cancelNotes(id: string): Promise<boolean>;
   showOverlay(show: boolean): Promise<void>;
   hideOverlay(): Promise<void>;
   onEvent(callback: (event: BridgeEvent) => void): () => void;

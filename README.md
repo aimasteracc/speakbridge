@@ -24,13 +24,22 @@
 
 ## 直接运行
 
-本次验证产物在 `release/0.7.9/`（常规打包命令默认输出到 `release/`）：
+本次验证产物在 `release/0.7.10/`（常规打包命令默认输出到 `release/`）：
 
-- macOS Apple Silicon：`SpeakBridge-0.7.9-mac-arm64.zip`
-- macOS Intel：`SpeakBridge-0.7.9-mac-x64.zip`
-- Windows x64：`SpeakBridge-0.7.9-win-x64.zip`
+- macOS Apple Silicon：`SpeakBridge-0.7.10-mac-arm64.zip`
+- macOS Intel：`SpeakBridge-0.7.10-mac-x64.zip`
+- Windows x64：`SpeakBridge-0.7.10-win-x64.zip`
 
 Mac 解压后将 `SpeakBridge.app` 放入“应用程序”并打开；Windows 解压整个目录，运行 `SpeakBridge.exe`。不要只移动 exe，需保留同目录文件。Mac 使用本地 ad-hoc 签名，未使用开发者证书或 Apple 公证，适合内部试用；本地签名不保证升级后保留权限，公开分发前需要稳定的开发者签名与公证。
+
+## 0.7.10 多语言与长会议纪要
+
+- 默认根据转写原文识别中文、日文、英文，也可手动指定；不再固定输出日文。保留七部分结构、表格及不推测缺失信息的要求。
+- 取消统一的 100,000 字符限制，按所选模型的上下文和输出 token 容量规划请求。DeepSeek Flash / V4 Pro 按官方标称 1,000,000 token 上下文配置，容纳得下时完整提交，超出时才逐段整理后汇总。其他部署可手动填写容量；未知模型不虚构上限。
+- 输入 token 是保守估算，并非模型 tokenizer 的精确计数。默认输出预算按模型配置（DeepSeek 为 32,768）；输出预算与上下文容量分开，可在设置中调整。DeepSeek 纪要关闭思考模式，默认单次请求超时为 600 秒。
+- 显示等待时间、已接收字数和分段进度，可停止生成或关闭详情后继续。503 等服务繁忙 / 429 限流最多自动重试两次；身份、余额、断流错误不会无限重试。错误保留在记录中，完整成功后才替换旧纪要。
+- API 引擎的连接测试即使关闭翻译也会发送固定短文本，避免把“本地识别可用”误报为“文字 API 可用”。
+- 版本说明、模型来源和验证范围见 [纪要修复记录](docs/MEETING-NOTES-0.7.10.md)。
 
 ## 0.7.9 可切换配色
 

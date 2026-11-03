@@ -7,6 +7,7 @@ const DEFAULT_SETTINGS = {
   translationModel: 'gpt-4.1-mini', sourceLanguage: 'auto', targetLanguage: 'zh',
   audioSource: 'microphone', microphoneId: '', viewMode: 'transcript',
   silenceMs: 700, speechThreshold: 0.012, subtitleFontSize: 24, dictionary: [],
+  notesContextTokens: 0, notesOutputTokens: 0, notesTimeoutSeconds: 600,
 };
 function validateSettings(input) {
   const result = { ...DEFAULT_SETTINGS };
@@ -34,6 +35,10 @@ function validateSettings(input) {
   if (!Number.isFinite(result.subtitleFontSize) || result.subtitleFontSize < 16 || result.subtitleFontSize > 40) throw new Error('字幕字号必须为 16–40。');
   if (!Array.isArray(result.dictionary) || result.dictionary.length > 100 || result.dictionary.some(x => typeof x !== 'string' || !x.trim() || x.length > 80 || /[<>\r\n]/.test(x))) throw new Error('词典最多 100 项，每项最多 80 字，不含换行或尖括号。');
   result.dictionary = [...new Set(result.dictionary.map(x => x.trim()))];
+  for (const key of ['notesContextTokens', 'notesOutputTokens']) {
+    if (!Number.isSafeInteger(result[key]) || result[key] < 0 || result[key] > 10000000 || (result[key] > 0 && result[key] < 1024)) throw new Error('纪要 token 预算须为 0（自动）或 1,024–10,000,000 的整数。');
+  }
+  if (!Number.isInteger(result.notesTimeoutSeconds) || result.notesTimeoutSeconds < 30 || result.notesTimeoutSeconds > 1800) throw new Error('纪要请求超时须为 30–1800 秒。');
   return result;
 }
 function realtimeConfig(settings) {

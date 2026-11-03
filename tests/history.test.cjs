@@ -17,13 +17,40 @@ function fixture(t, options) {
 }
 function deferred() { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 
-test('minutes use the Japanese template and regeneration failure keeps previous notes', async t => {
+test('notes errors survive restart; retry clears errors without losing the original transcript', async t => {
+  const events = [], { store, actions, reload } = fixture(t, { onNotesProgress: value => events.push(value) });
+  const original = structuredClone(store.find('one'));
+  await assert.rejects(actions.makeNotes('one', async () => { throw Error('服务连接超时'); }), /超时/);
+  const restarted = new HistoryActions(reload());
+  assert.equal(restarted.notesStatus('one').state, 'failed');
+  assert.match(restarted.notesStatus('one').message, /超时/);
+  assert.equal(reload().find('one').notes, original.notes);
+  await actions.makeNotes('one', async (_prompt, _input, _signal, options) => { options.onDelta('完整内容'); return '# 中文纪要'; });
+  assert.equal(reload().find('one').notesError, '');
+  assert.equal(reload().find('one').notesLanguage, 'zh');
+  assert.deepEqual(reload().find('one').segments, original.segments);
+  assert.ok(events.some(value => value.state === 'running'));
+  assert.equal(events.at(-1).state, 'completed');
+});
+test('cancellation rejects a late successful result, preserves previous notes, and permits a fresh generation', async t => {
+  const { store, actions } = fixture(t), response = deferred(), before = store.find('one').notes;
+  let signal;
+  const work = actions.makeNotes('one', (_prompt, _input, value) => { signal = value; return response.promise; });
+  assert.equal(actions.notesStatus('one').state, 'running');
+  assert.equal(actions.cancelNotes('one'), true); assert.equal(signal.aborted, true);
+  response.resolve('late result'); await assert.rejects(work, /取消/);
+  assert.equal(store.find('one').notes, before); assert.equal(actions.notesStatus('one').state, 'cancelled');
+  await actions.makeNotes('one', async () => 'fresh result');
+  assert.equal(store.find('one').notes, 'fresh result');
+});
+
+test('minutes follow Chinese source language and regeneration failure keeps previous notes', async t => {
   const { store, actions, reload } = fixture(t), before = store.find('one').notes;
   for (const generate of [async () => { throw Error('provider failed'); }, async () => '   ']) {
     await assert.rejects(actions.makeNotes('one', generate)); assert.equal(reload().find('one').notes, before);
   }
   await actions.makeNotes('one', async (instructions, input) => {
-    assert.match(instructions, /## 7\. 会議の位置づけ/);
+    assert.match(instructions, /## 7\. 会议总结/);
     assert.equal(JSON.parse(input).materials[0].content, '固定测试文本 one');
     return '# 新しい議事録';
   });

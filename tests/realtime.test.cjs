@@ -41,5 +41,5 @@ test('transcription configuration error rejects connection promptly', async () =
   finally { for (const socket of server.clients) socket.terminate(); await new Promise(resolve => server.close(resolve)); }
 });
 test('translation surfaces authentication error instead of inventing text', async () => {
-  await assert.rejects(translate(DEFAULT_SETTINGS, 'bad', 'hello', undefined, async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'Invalid API key' } }) })), /401.*Invalid API key/);
+  await assert.rejects(translate(DEFAULT_SETTINGS, 'bad', 'hello', undefined, async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'Invalid API key' } }) })), error => error.code === 'AUTH' && /401/.test(error.message));
 });

@@ -1,11 +1,11 @@
-import { memo, useEffect, useRef, useState } from 'react';
-import { ArrowDownToLine, Check, ChevronRight, Clock3, Copy, FileText, Flag, Mic, Search, Sparkles, Trash2, X, RotateCcw, LoaderCircle, ShieldCheck, KeyRound, Settings2 } from 'lucide-react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowDownToLine, Check, ChevronRight, Clock3, Copy, FileText, Flag, Mic, Search, Trash2, X, RotateCcw, LoaderCircle, ShieldCheck, KeyRound, Settings2 } from 'lucide-react';
 import { dateTime, duration, languages, sourceNames, type Session, type Settings, type Capabilities, type Segment } from './types';
 import { LiveText } from './LiveText';
 import { hasSpeechText } from './text-motion';
 import { useFollowScroll } from './useFollowScroll';
 import { DeleteButton } from './DeleteButton';
-import { MarkdownNotes } from './MarkdownNotes';
+import { MeetingNotes, NotesBudgetSettings } from './MeetingNotes';
 
 export function EmptyState({ title, detail }: { title: string; detail: string }) {
   return <div className="empty-state"><div className="empty-icon"><FileText size={24} strokeWidth={1.5} /></div><h3>{title}</h3><p>{detail}</p></div>;
@@ -77,7 +77,7 @@ export function SessionDialog({ session, onClose, onUpdate, onDelete, onDeleteNo
   const [title, setTitle] = useState(session.title);
   const [busy, setBusy] = useState('');
   const [tab, setTab] = useState(initialTab);
-  const [regenerate, setRegenerate] = useState(false);
+  const onNotesBusy = useCallback((value: boolean) => setBusy(value ? 'notes' : ''), []);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement;
     ref.current?.focus();
@@ -99,9 +99,8 @@ export function SessionDialog({ session, onClose, onUpdate, onDelete, onDeleteNo
     <input className="title-input" aria-label="会话标题" value={title} maxLength={120} onChange={e => setTitle(e.target.value)} onBlur={() => { if (title.trim() && title !== session.title) window.speakbridge.updateSession(session.id, { title }).then(onUpdate).catch(error => notify(String(error))); }} />
     <div className="detail-meta">{dateTime(session.startedAt)}<span>·</span><Clock3 size={14} />{duration(session.durationMs)}<span>·</span>{session.segments.filter(s => s.text).length} 段转写</div>
     <div className="dialog-tools"><div className="segmented"><button className={tab === 'transcript' ? 'active' : ''} onClick={() => setTab('transcript')}>转写与翻译</button><button className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>会议纪要</button></div><div className="toolbar-actions"><button className="small-button" disabled={!!busy} onClick={() => run('copy', async () => { await window.speakbridge.copySession(session.id); notify('已复制会话文本'); })}><Copy size={15} />复制</button><label className="export-select"><ArrowDownToLine size={15} /><select aria-label="导出会话" defaultValue="" disabled={!!busy} onChange={e => { const format = e.target.value; e.target.value = ''; if (format) run('export', async () => { if (await window.speakbridge.exportSession(session.id, format)) notify('已导出会话'); }); }}><option value="" disabled>导出</option><option value="txt">文本 .txt</option><option value="md">Markdown .md</option><option value="srt">字幕 .srt</option></select></label></div></div>
-    {tab === 'transcript' ? <Transcript session={session} /> : session.notes ? <MarkdownNotes text={session.notes} /> : <div className="notes-empty"><Sparkles size={28} /><h3>让重点一目了然</h3><p>按日语议事录模板整理概要、议题、决定与待办。<br />资料中不明确的信息标注为「不明」或「未定」。</p><button className="primary compact" disabled={!!busy || disabled || !session.segments.some(s => s.text)} onClick={() => run('notes', async () => onUpdate(await window.speakbridge.makeNotes(session.id)))}>{busy === 'notes' ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}生成会议纪要</button></div>}
+    {tab === 'transcript' ? <Transcript session={session} /> : <MeetingNotes key={session.id} session={session} disabled={disabled} onUpdate={onUpdate} onBusy={onNotesBusy} />}
     <div className="dialog-footer"><span className="muted">{busy ? '正在处理…' : disabled ? '会话进行中，结束后可删除。' : '已保存在本机'}</span><div className="toolbar-actions">{session.segments.some(s => s.translationError || (s.text && !s.translation && session.targetLanguage !== 'off')) && !session.demo && <button className="small-button" disabled={!!busy || disabled} onClick={() => run('retry', async () => onUpdate(await window.speakbridge.retryTranslation(session.id)))}><RotateCcw size={14} />重试翻译</button>}
-      {tab === 'notes' && session.notes && (regenerate ? <div className="notes-regenerate"><span>按新模板重新生成？成功后替换现有纪要。</span><button className="small-button" disabled={!!busy || disabled} onClick={() => run('notes', async () => { onUpdate(await window.speakbridge.makeNotes(session.id)); setRegenerate(false); })}>{busy === 'notes' ? '正在生成…' : '确认重新生成'}</button><button className="small-button" disabled={!!busy} onClick={() => setRegenerate(false)}>取消</button></div> : <button className="small-button" disabled={!!busy || disabled || !session.segments.some(s => s.text)} onClick={() => setRegenerate(true)}><Sparkles size={14} />重新生成</button>)}
       {tab === 'notes' ? session.notes && <DeleteButton key={'notes-' + session.id} label="删除这份纪要" description="只删除纪要，保留这条会话的转写和翻译。" disabled={!!busy || disabled} onDelete={() => onDeleteNotes(session.id)} /> : <DeleteButton key={session.id} label="删除这条会话" description="删除这条会话及其转写、翻译和纪要？" disabled={!!busy || disabled} onDelete={() => onDelete(session.id)} />}
     </div></div>
   </div></div>;
@@ -149,7 +148,8 @@ export function SettingsPage({ settings, onChange, onSaved, notify, dataDirector
       {settings.keyError && <p className="row-error">{settings.keyError}</p>}
       <label className="form-label">API 地址<input value={settings.baseUrl} onChange={e => field('baseUrl', e.target.value)} placeholder="https://api.openai.com/v1" spellCheck={false} /></label>
       <div className="form-grid"><label className="form-label">实时转写模型<input value={settings.transcriptionModel} onChange={e => field('transcriptionModel', e.target.value)} spellCheck={false} /></label><label className="form-label">翻译 / 纪要模型<input value={settings.translationModel} onChange={e => field('translationModel', e.target.value)} spellCheck={false} /></label></div>
-      <p className="field-help">默认连接 OpenAI。自定义服务需同时支持 Realtime 转写和 Responses API。</p>
+      <p className="field-help">云端纪要 / 翻译需要 Responses API。只有选择云端语音时才需要 Realtime；本地语音可以配合 DeepSeek。</p>
+      <NotesBudgetSettings settings={settings} onChange={onChange} />
       <div className="settings-actions"><button className="primary compact" disabled={!!busy} onClick={() => save()}>{busy === 'save' ? <LoaderCircle size={16} className="spin" /> : <Check size={16} />}保存设置</button><button className="small-button" disabled={!!busy} onClick={() => save(true)}>{busy === 'test' && <LoaderCircle size={15} className="spin" />}保存并测试连接</button>{settings.hasKey && <button className="text-button" disabled={!!busy} onClick={async () => { try { onSaved(await window.speakbridge.saveSettings({ ...settings, apiKey: '' })); notify('API Key 已移除'); } catch (error) { notify(String(error)); } }}>移除密钥</button>}</div>
     </div>
     <div className="settings-section"><h2><Settings2 size={20} />音频与字幕</h2><div className="form-grid"><label className="form-label">麦克风<select value={settings.microphoneId} onChange={e => field('microphoneId', e.target.value)}><option value="">系统默认麦克风</option>{devices.filter(d => d.deviceId && d.deviceId !== 'default').map((device, i) => <option key={device.deviceId} value={device.deviceId}>{device.label || `麦克风 ${i + 1}`}</option>)}</select></label><label className="form-label">语音停顿分段<select value={settings.silenceMs} onChange={e => field('silenceMs', +e.target.value)}><option value={400}>400 ms · 更快</option><option value={700}>700 ms · 均衡</option><option value={1200}>1200 ms · 更完整</option></select></label><label className="form-label">语音检测灵敏度<select value={settings.speechThreshold} onChange={e => field('speechThreshold', +e.target.value)}><option value={.006}>高 · 适合轻声说话</option><option value={.012}>标准</option><option value={.025}>低 · 减少背景噪声触发</option></select></label><label className="form-label">悬浮字幕字号<select value={settings.subtitleFontSize} onChange={e => field('subtitleFontSize', +e.target.value)}>{[18, 20, 24, 28, 32, 36, 40].map(n => <option key={n} value={n}>{n} px</option>)}</select></label></div><button className="small-button" disabled={!!busy} onClick={() => save()}>保存偏好</button></div>

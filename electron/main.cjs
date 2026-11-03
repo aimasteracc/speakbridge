@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const os = require('node:os');
 const { Store } = require('./store.cjs');
 const { HistoryActions } = require('./history.cjs');
+const { notesPlan } = require('./meeting-notes.cjs');
 const { validateSettings, exportSession } = require('./core.cjs');
 const { RealtimeTranscriber } = require('./realtime.cjs');
 const { SonioxTranscriber } = require('./soniox.cjs');
@@ -374,6 +375,7 @@ async function stop(finalStatus = 'completed') {
 app.whenReady().then(() => {
   store = new Store(app.getPath('userData'), safeStorage);
   historyActions = new HistoryActions(store, {
+    onNotesProgress: progress => publish('notes-progress', progress),
     isActive: id => current?.id === id && status !== 'idle',
     onChange: changed => {
       const ids = Array.isArray(changed) ? changed : [changed];
@@ -407,7 +409,7 @@ app.whenReady().then(() => {
   handle('settings:save', input => { if (status !== 'idle' || dictationContext || dictationBusy) throw new Error('请先结束当前会话，再修改设置。'); return store.saveSettings(input); });
   handle('connection:test', async () => {
     if (status !== 'idle' || dictationContext || dictationBusy) throw new Error('请先结束当前会话。');
-    const route = routing(); preflight(store.settings);
+    const route = routing(store.settings, store.settings.targetLanguage !== 'off' || store.settings.textProvider === 'api'); preflight(store.settings);
     if (route.engines.speech === 'api') {
       const check = new RealtimeTranscriber({ settings: store.settings, apiKey: route.key, onSegment: () => {}, onFatal: () => {}, onWarning: () => {} });
       try { await check.connect(); } finally { await check.stop(); }
@@ -416,6 +418,7 @@ app.whenReady().then(() => {
       await check.testConnection();
     } else await whisper.prepare(false, store.settings.localModel, store.settings.sourceLanguage);
     if (store.settings.targetLanguage !== 'off') await route.router.translate('Hello.');
+    else if (store.settings.textProvider === 'api') await route.router.generate('Reply with OK only.', 'Connection test.', undefined, { timeoutMs: 60000, maxOutputTokens: 1024, ...(notesPlan({ status: 'completed', segments: [{ text: 'test' }] }, store.settings, 'api').deepseek ? { reasoningEffort: 'none' } : {}) });
     return true;
   });
   handle('session:start', start);
@@ -481,8 +484,15 @@ app.whenReady().then(() => {
       return router.translate(text);
     });
   });
-  handle('history:notes', async id => {
-    return historyActions.makeNotes(id, (instructions, input) => routing(store.settings, true, false).router.generate(instructions, input, undefined, { maxOutputTokens: 8192, timeoutMs: 180000 }));
+  handle('history:notes', async (id, language = 'auto') => {
+    const settings = { ...store.settings }, route = routing(settings, true, false);
+    return historyActions.makeNotes(id, (instructions, input, signal, options) => route.router.generate(instructions, input, signal, options), { settings, provider: route.engines.text, language });
+  });
+  handle('history:notes-status', id => historyActions.notesStatus(id));
+  handle('history:notes-cancel', id => historyActions.cancelNotes(id));
+  handle('history:notes-plan', (id, language = 'auto') => {
+    const provider = store.settings.textProvider === 'auto' && store.publicSettings().hasKey ? 'api' : store.settings.textProvider;
+    return notesPlan(store.find(id), store.settings, provider, language);
   });
   handle('overlay:show', show => showOverlay(show === true));
   handle('overlay:hide', () => showOverlay(false), true);

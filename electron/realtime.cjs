@@ -2,22 +2,77 @@ const WebSocket = require('ws');
 const { VoiceGate, realtimeConfig, LANGUAGES } = require('./core.cjs');
 const { cleanSpeechText } = require('./speech-text.cjs');
 
-async function generateText(settings, apiKey, instructions, input, signal, fetchFn = fetch, options = {}) {
-  const timeout = AbortSignal.timeout(options.timeoutMs || 20000);
-  const response = await fetchFn(`${settings.baseUrl}/responses`, {
-    method: 'POST', signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: settings.translationModel, instructions, input, store: false, max_output_tokens: options.maxOutputTokens || 2048 }),
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(`服务请求失败 (${response.status})：${String(body.error?.message || response.statusText).slice(0, 240)}`);
+function textError(code, message) { return Object.assign(new Error(message), { code }); }
+function completedText(body, streamed = '') {
+  if (body.status === 'incomplete') {
+    const reason = body.incomplete_details?.reason;
+    if (reason === 'max_output_tokens') {
+      const used = body.usage?.output_tokens, thinking = body.usage?.output_tokens_details?.reasoning_tokens;
+      throw textError('OUTPUT_LIMIT', `生成达到本次输出 token 预算，未保存不完整的结果。${Number.isFinite(used) ? `已使用 ${used} token${Number.isFinite(thinking) ? `，其中思考 ${thinking} token` : ''}。` : ''}可提高纪要输出预算后重试。`);
+    }
+    throw textError(reason === 'content_filter' ? 'CONTENT_FILTER' : 'INCOMPLETE', '服务未完成生成，原有内容已保留。请检查服务限制后重试。');
   }
-  const body = await response.json();
-  if (body.status === 'incomplete' || body.status === 'failed' || body.error) throw new Error('服务未完成生成，未保存不完整的结果。请缩短会话或重试。');
-  const text = body.output?.flatMap(item => item.content || []).filter(part => part.type === 'output_text').map(part => part.text).join('') || body.output_text;
-  if (!text?.trim()) throw new Error('服务未返回完整文本，请重试。');
+  if (body.status === 'failed' || body.error) throw textError('PROVIDER_FAILED', '服务未完成生成，原有内容已保留，请稍后重试。');
+  const text = body.output?.flatMap(item => item.content || []).filter(part => part.type === 'output_text').map(part => part.text).join('') || body.output_text || streamed;
+  if (!text?.trim()) throw textError('EMPTY_RESPONSE', '服务未返回完整文本，请重试。');
   return text.trim();
+}
+async function readTextStream(response, onDelta) {
+  const decoder = new TextDecoder(); let buffer = '', text = '', terminal;
+  function event(block) {
+    const data = block.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+    if (!data || data === '[DONE]') return;
+    let value; try { value = JSON.parse(data); } catch { throw textError('INVALID_STREAM', '服务返回了无法解析的流式数据，未保存不完整结果。'); }
+    if (value.type === 'response.output_text.delta' && typeof value.delta === 'string') {
+      text += value.delta; onDelta(value.delta);
+      if (text.length > 8000000) throw textError('RESPONSE_TOO_LARGE', '服务返回内容异常过长，生成已停止。');
+    }
+    // Reasoning events are deliberately ignored, never displayed or persisted.
+    if (['response.completed', 'response.incomplete', 'response.failed'].includes(value.type)) terminal = value.response || { status: value.type.slice(9) };
+    if (value.type === 'error') throw textError('PROVIDER_FAILED', '服务中断了生成，未保存不完整结果，请重试。');
+  }
+  for await (const chunk of response.body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let separator;
+    while ((separator = /\r?\n\r?\n/.exec(buffer))) { event(buffer.slice(0, separator.index)); buffer = buffer.slice(separator.index + separator[0].length); }
+    if (buffer.length > 8000000) throw textError('INVALID_STREAM', '服务返回的流式数据异常，生成已停止。');
+  }
+  buffer += decoder.decode(); if (buffer.trim()) event(buffer);
+  if (!terminal) throw textError('INCOMPLETE', '连接在生成完成前中断，原有纪要已保留，请重试。');
+  return completedText(terminal, text);
+}
+async function generateText(settings, apiKey, instructions, input, signal, fetchFn = fetch, options = {}) {
+  if (/[^\x21-\x7e]/.test(apiKey)) throw textError('INVALID_KEY', 'API Key 含有空格或非英文字符，请在设置中重新填写正确的密钥。');
+  const timeoutMs = options.timeoutMs || 20000, timeout = AbortSignal.timeout(timeoutMs);
+  try {
+    const response = await fetchFn(`${settings.baseUrl}/responses`, {
+      method: 'POST', signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: settings.translationModel, instructions, input, store: false, max_output_tokens: options.maxOutputTokens || 2048,
+        ...(options.reasoningEffort ? { reasoning: { effort: options.reasoningEffort } } : {}),
+        ...(options.onDelta ? { stream: true } : {}) }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      const detail = String(body.error?.message || response.statusText || '').replaceAll(apiKey || '\0', '[密钥]').replace(/sk-[\w-]+/g, '[密钥]').slice(0, 240);
+      const errors = { 401: ['AUTH', 'API Key 无效或已失效，请检查密钥'], 402: ['BALANCE', 'API 账户余额不足，请检查服务账户'], 429: ['RATE_LIMIT', 'API 请求受限，请稍后重试'], 500: ['SERVER', '服务暂时出错，请稍后重试'], 503: ['SERVER', '服务繁忙，请稍后重试'] };
+      if (errors[response.status]) {
+        const error = textError(errors[response.status][0], `${errors[response.status][1]} (${response.status})。原有内容已保留。`);
+        const retry = response.headers?.get('retry-after');
+        if (retry) { const ms = /^\d+(?:\.\d+)?$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now(); if (Number.isFinite(ms) && ms > 0) error.retryAfterMs = ms; }
+        throw error;
+      }
+      if (/context.*(length|limit|window)|maximum context|too many.*tokens/i.test(detail)) throw textError('CONTEXT_LIMIT', `输入超出当前服务的上下文限制 (${response.status})。请在设置中填写该部署实际的上下文 token 容量，程序会按容量分段整理。`);
+      throw textError('REQUEST_FAILED', `服务请求失败 (${response.status})：${detail}`);
+    }
+    if (options.onDelta && response.body && response.headers?.get('content-type')?.includes('text/event-stream')) return await readTextStream(response, options.onDelta);
+    return completedText(await response.json());
+  } catch (error) {
+    if (signal?.aborted) throw textError('CANCELLED', '纪要生成已取消，原有内容已保留。');
+    if (timeout.aborted || error.name === 'TimeoutError') throw textError('REQUEST_TIMEOUT', `服务在 ${Math.round(timeoutMs / 1000)} 秒内未完成生成。原文和原有纪要已保留，可重试或在设置中延长纪要超时。`);
+    if (error.code) throw error;
+    throw textError('NETWORK', '无法完成模型服务请求，请检查网络或服务状态后重试。原有内容已保留。');
+  }
 }
 async function translate(settings, key, text, signal, fetchFn) {
   return generateText(settings, key,
