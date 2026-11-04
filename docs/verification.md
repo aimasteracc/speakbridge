@@ -13,10 +13,10 @@
 | 打包应用 | Mac arm64 0.8.0 包内录屏、回放、裁剪、真实本地英文 OCR、Word/PDF 导出及重启恢复通过 | 未替换用户安装；Mac 为 ad-hoc 签名，未完成开发者签名和公证 |
 | 通用会议流程 | 8 组 Electron 场景通过：演示、双语字幕、历史、隔离凭据、本地模拟 API、合成音频、暂停不发送 PCM、浮动工具栏恢复、会议录屏共用混音并随会议保存、纪要及重启 | 自动会议提醒的真实应用检测、长会自动停止／自动纪要仍需设备与服务验收 |
 | 听写 UI | 新快捷键编辑、权限状态、整理服务选择、保存失败、原文／结果复制、取消、深色与最小窗口 fixture 通过 | 本轮没有重新验收真实听写到 Codex；没有用新 UI 测试结果替代原生输入验证 |
-| 原生组件 | Mac arm64 / x64 Swift 与 Windows AnyCPU C# 编译通过；Mac 空绑定、剪贴板计数及清理协议通过 | 鼠标中键／侧键和按住释放需真实硬件验收；Windows / Intel Mac 实机 pending |
+| 原生组件 | Mac arm64 / x64 Swift 与 Windows AnyCPU C# 编译通过；GitHub 的 Mac、Windows x64 / arm64 上均通过空绑定、剪贴板计数及清理协议，以及原生 ASR 库加载 | 鼠标中键／侧键和按住释放需真实硬件验收；Windows / Intel Mac 实机 pending |
 | 屏幕问答 | 本地 OCR 确实读出合成截图中的 SpeakBridge；记忆 opt-in、取消与独立删除测试通过；本地 HTTP fixture 验证问答 UI 只发送确认文字及勾选记忆 | 只提取文字，不解释图片／图表；问答沿用所选文字引擎，API / CLI 可能联网收费 |
 | Word / PDF | DOCX OOXML 表格与 Unicode 校验；Electron 导出 PDF 成功，渲染后目视检查中日表格与标题 | 未在所有 Office 版本逐一验收 |
-| Windows arm64 | 新打包目标、AnyCPU 输入组件和原生 ASR 依赖路径；CI 配置 Windows 11 arm64 runner | 配置与编译不代表 ARM Windows 安装、驱动、输入和录屏均通过；需 .NET Framework 4.8.1 |
+| Windows arm64 | Windows 11 arm64 runner 上安装依赖、131 项测试、构建、原生协议、ASR 库加载、NSIS / ZIP 打包及上传全部通过 | 配置与编译不代表 ARM Windows 安装、驱动、输入和录屏均通过；需 .NET Framework 4.8.1 |
 | 依赖与隐私 | 生产依赖 `npm audit --omit=dev` 无已知漏洞；新增依赖许可随包分发；测试使用合成资料和独立目录 | 开发依赖链仍有 audit 告警，不使用强制降级绕过；扫描不保证发现所有秘密 |
 
 复现入口：`npm test`、`node tests/electron.e2e.cjs`、`node tests/workspace.e2e.cjs`、`node tests/dictation-readiness.e2e.cjs`、`node tests/dictation-cleanup.e2e.cjs`、`node tests/native-protocol-smoke.cjs`。打包工作区验收可设置 `SPEAKBRIDGE_TEST_EXECUTABLE` 为当前可执行文件绝对路径。工作区测试首次 OCR 会下载英文模型，不上传截图或使用付费 API。
@@ -33,7 +33,7 @@
 
 公开仓库为 `aimasteracc/speakbridge`，默认分支 `main`。0.8.0 在 `codex/workspace-features-20261104` 开发，旧源码保留标签 `v0.7.11-before-workspace-features-20261104`。本机 ZIP 与 GitHub Release 是不同交付；本轮不自动发布正式 Release。
 
-CI 已补齐 .NET SDK / net48 参考程序集准备及 Windows arm64 job，仅手动或 `v*` 标签触发，上传 Actions artifacts。远程执行结果尚待确认，不把配置完成记作远程通过。版本包和全部源码的一致性以最终重新打包校验为准。
+CI 已补齐 .NET SDK / net48 参考程序集准备及 Windows arm64 job，仅手动或 `v*` 标签触发，上传 Actions artifacts。针对功能提交 `87fa155` 的 Mac、Windows x64、Windows arm64 三项远程 job 全部成功；每项执行敏感信息扫描、131 项测试、构建、原生协议和 ASR 库加载，再打包上传。四个平台的本机 ZIP 已重新构建：各 62 个应用／许可文件与源码匹配，ASR 库架构及 Windows AnyCPU 标志正确，ZIP 完整性与 SHA-256 通过，Mac 双架构严格 ad-hoc 签名通过。证据为 `test-artifacts/package-0.8.0-verification.json`，校验值在 `release/0.8.0/SHA256SUMS.txt`。源码开发提交 `87fa155` 已推送并建立 [PR #1](https://github.com/aimasteracc/speakbridge/pull/1)，[远程 CI](https://github.com/aimasteracc/speakbridge/actions/runs/41753799447) 全部通过。后续文档提交不改变包内运行代码。
 
 ## 公开前的隐私处理（2026-11-04）
 

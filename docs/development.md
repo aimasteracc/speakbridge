@@ -20,7 +20,7 @@ export SPEAKBRIDGE_DOTNET_DIR="/absolute/path/to/dotnet-sdk"
 export SPEAKBRIDGE_NET48_REFS="/absolute/path/to/net48/build/.NETFramework/v4.8"
 ```
 
-两处都是本机绝对路径占位符，必须替换为实际目录。SDK 根目录应包含 `dotnet` 和 `sdk/`；参考目录应包含 `mscorlib.dll`、`UIAutomationClient.dll` 等 net48 程序集。历史交叉编译使用 .NET SDK 8.0.427，见[0.6.0 构建记录](archive/releases/0.6.0-dictation.md)。CI 使用 `node scripts/prepare-native-references.mjs` 下载并校验固定 SHA-256 的参考包，写入后续步骤环境；本机可手动设置相同路径。远程空白 runner 结果仍待确认。
+两处都是本机绝对路径占位符，必须替换为实际目录。SDK 根目录应包含 `dotnet` 和 `sdk/`；参考目录应包含 `mscorlib.dll`、`UIAutomationClient.dll` 等 net48 程序集。历史交叉编译使用 .NET SDK 8.0.427，见[0.6.0 构建记录](archive/releases/0.6.0-dictation.md)。CI 使用 `node scripts/prepare-native-references.mjs` 下载并校验固定 SHA-256 的参考包，写入后续步骤环境；本机可手动设置相同路径。三平台空白 runner 的执行证据见[验证状态](verification.md)。
 
 Windows 组件源码／产物哈希记录在 `electron/native/dictation-win.build.json`。构建更新该清单时，应审查是否由预期编译器和源码产生，不能用旧二进制绕过检查。安装包用户无需这些开发工具。
 
@@ -97,7 +97,7 @@ node scripts/verify-package.cjs
 
 [GitHub Actions 工作流](../.github/workflows/build.yml)仅由手动执行或 `v*` 标签推送触发，普通分支推送不触发。它使用 macOS / Windows runner 执行敏感信息检查、安装、测试、构建和打包，再上传 Actions artifacts；没有自动创建 GitHub Release。
 
-0.8.0 已加入 `setup-dotnet`、参考程序集准备、原生协议检查和 Windows 11 arm64 job。远程结果须执行后再记入验证状态；本机交叉编译不能替代 Windows / Intel Mac 实机运行。
+0.8.0 已加入 `setup-dotnet`、参考程序集准备、原生协议检查和 Windows 11 arm64 job。2026-11-04 三平台远程任务全部通过，见[验证状态](verification.md)；runner 的基础协议与构建检查仍不能替代真实麦克风、鼠标和目标应用输入验收。
 
 ## 自定义 Harness 协议
 
