@@ -1,0 +1,11 @@
+import { useEffect, useState } from 'react';
+import { GripVertical, Pause, Play, Square, Video } from 'lucide-react';
+import { duration, type SessionState } from './types';
+export function MeetingToolbar() {
+  const [state, setState] = useState<SessionState>({ status: 'idle', session: null, error: '' }), [time, setTime] = useState(0), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  useEffect(() => { void window.speakbridge.bootstrap().then(x => setState(x.state)); return window.speakbridge.onEvent(e => { if (e.type === 'session') { setState(e.payload as SessionState); setBusy(false); } }); }, []);
+  useEffect(() => { const tick = () => setTime(state.capture && state.status === 'idle' ? (state.capture.pausedAt || Date.now()) - state.capture.startedAt - state.capture.pausedMs : state.session ? state.status === 'recording' ? Date.now() - state.session.startedAt - (state.session.pausedMs || 0) : state.session.durationMs : 0); tick(); const timer = setInterval(tick, 500); return () => clearInterval(timer); }, [state]);
+  async function action(command: 'pause' | 'stop' | 'capture') { setBusy(true); setError(''); try { await window.speakbridge.toolbarAction(command); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
+  const paused = state.status === 'paused' || !!state.capture?.paused, active = ['recording', 'paused'].includes(state.status) || !!state.capture;
+  return <div className="meeting-toolbar"><div className="toolbar-grip"><GripVertical size={17} /><i className={'record-dot ' + (paused ? 'paused' : '')} /><span>{paused ? '已暂停' : state.status === 'idle' ? '画面' : '会议'} {duration(time)}</span></div><button aria-label={paused ? '继续会议' : '暂停会议'} disabled={busy || !active} onClick={() => action('pause')}>{paused ? <Play size={18} /> : <Pause size={18} />}</button><button aria-label="画面录制" disabled={busy || state.status !== 'recording' || !!state.capture} onClick={() => action('capture')}><Video size={19} /></button><button aria-label="结束会议" disabled={busy || state.status === 'stopping'} onClick={() => action('stop')}><Square size={16} /></button>{error && <span role="alert" className="toolbar-error">{error}</span>}</div>;
+}

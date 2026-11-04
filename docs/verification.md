@@ -2,35 +2,38 @@
 
 [返回文档索引](README.md)
 
-更新日期：**2026-11-04**。功能验证基线为 **0.7.11，提交 `3e4fe87`**（公开前仅清理提交邮箱，代码内容不变）。下表区分已有记录、此次文档核对和仍未完成的实机验收；源码推送、打包成功与用户正在运行新版是不同状态。
+更新日期：**2026-11-04**。当前源码版本 **0.8.0**；本次仅开发本地工作区功能。下表明确区分合成验证、打包应用与真实设备验收。没有替换或重启用户已安装的声桥，没有访问真实会议或调用付费 API。
 
-## 功能与平台证据
+## 0.8.0 功能与平台证据
 
-| 项目 | 已有证据 | 仍不能据此宣称 |
+| 项目 | 已验证 | 尚未验证或限制 |
 | --- | --- | --- |
-| 逻辑、协议与生命周期 | 0.7.11 记录中 116 项测试通过，生产构建通过 | 真实麦克风、每个目标应用或所有云服务均成功 |
-| 听写整理 UI | 服务选择、保存失败、原文／结果复制、取消、深色与最小窗口 fixture 通过 | 实际 OS 输入已回归 |
-| Mac arm64 打包应用 | 隔离空 userData 启动、保存整理选择、重启恢复通过；本机结果文件仍可核对 | 用户当前运行版本已替换，或真实麦克风 → 当前 Codex 输入框已验收 |
-| Mac arm64 / x64、Windows x64 包 | 文档整理前的三包各 39 个应用文件匹配，原生架构、ZIP 完整性和 Mac 严格 ad-hoc 签名通过 | Windows / Intel Mac 实机已运行，或已完成公开分发签名与公证 |
-| Codex 实际文字整理 | 8 条合成固定文本中 8/8 符合预设最小编辑结果，约 3.6–5 秒／条 | CER/WER、复杂会议准确率或超过原版 |
-| 本机 Ollama `qwen3.5:2b` | 同样文本 3/8 符合预期，记录了漏改／误改；未设为默认 | 小模型整理已足够可靠 |
-| 多语言／长会议纪要 | 语言、容量、473 段完整请求、取消、断流、重试与旧正文保留的模拟验证通过 | 真实 DeepSeek 中日长会议已成功生成；0.7.10 当次服务返回 503，这不是当前服务健康结论 |
-| 本地识别质量 | 0.3 / 0.4 有固定公开朗读录音评测 | 当前会议场景的统一准确率，或与 Speakly / Typeless 的同音频优劣结论 |
-| Soniox | 本机协议和界面链路验证 | 真实云端速度或准确率 |
+| 逻辑与协议 | 131 项 Node 测试通过；TypeScript、生产构建通过；媒体顺序写入、字节范围播放、索引失败保留、快捷键冲突回滚、剪贴板限额、问答取消、语言能力校验有覆盖 | 测试通过不代表所有硬件、目标应用或云服务可用 |
+| MP4 与截图 | Electron 隔离目录：区域 PNG 为 480×270；合成画面和音频录为 H.264/AAC MP4；内联播放、暂停、恢复、停止、重启与独立删除通过 | 手动滚动合成画面成功从 300 拼接为 421 像素，MP4 抽查 5 帧均有变化；真实屏幕权限、系统音频回环、长时间录制仍需实机验收 |
+| 打包应用 | Mac arm64 0.8.0 包内录屏、回放、裁剪、真实本地英文 OCR、Word/PDF 导出及重启恢复通过 | 未替换用户安装；Mac 为 ad-hoc 签名，未完成开发者签名和公证 |
+| 通用会议流程 | 8 组 Electron 场景通过：演示、双语字幕、历史、隔离凭据、本地模拟 API、合成音频、暂停不发送 PCM、浮动工具栏恢复、会议录屏共用混音并随会议保存、纪要及重启 | 自动会议提醒的真实应用检测、长会自动停止／自动纪要仍需设备与服务验收 |
+| 听写 UI | 新快捷键编辑、权限状态、整理服务选择、保存失败、原文／结果复制、取消、深色与最小窗口 fixture 通过 | 本轮没有重新验收真实听写到 Codex；没有用新 UI 测试结果替代原生输入验证 |
+| 原生组件 | Mac arm64 / x64 Swift 与 Windows AnyCPU C# 编译通过；Mac 空绑定、剪贴板计数及清理协议通过 | 鼠标中键／侧键和按住释放需真实硬件验收；Windows / Intel Mac 实机 pending |
+| 屏幕问答 | 本地 OCR 确实读出合成截图中的 SpeakBridge；记忆 opt-in、取消与独立删除测试通过；本地 HTTP fixture 验证问答 UI 只发送确认文字及勾选记忆 | 只提取文字，不解释图片／图表；问答沿用所选文字引擎，API / CLI 可能联网收费 |
+| Word / PDF | DOCX OOXML 表格与 Unicode 校验；Electron 导出 PDF 成功，渲染后目视检查中日表格与标题 | 未在所有 Office 版本逐一验收 |
+| Windows arm64 | 新打包目标、AnyCPU 输入组件和原生 ASR 依赖路径；CI 配置 Windows 11 arm64 runner | 配置与编译不代表 ARM Windows 安装、驱动、输入和录屏均通过；需 .NET Framework 4.8.1 |
+| 依赖与隐私 | 生产依赖 `npm audit --omit=dev` 无已知漏洞；新增依赖许可随包分发；测试使用合成资料和独立目录 | 开发依赖链仍有 audit 告警，不使用强制降级绕过；扫描不保证发现所有秘密 |
 
-具体方法与原始限制保留在[0.7.11 听写记录](archive/releases/0.7.11-dictation-cleanup.md)、[0.7.10 纪要记录](archive/releases/0.7.10-meeting-notes.md)、[0.4 语音评测](archive/reports/asr-quality-0.4.md)和[旧版 QA 汇编](archive/reports/qa-history.md)。历史报告中的“通过”只适用于其版本与场景。
+复现入口：`npm test`、`node tests/electron.e2e.cjs`、`node tests/workspace.e2e.cjs`、`node tests/dictation-readiness.e2e.cjs`、`node tests/dictation-cleanup.e2e.cjs`、`node tests/native-protocol-smoke.cjs`。打包工作区验收可设置 `SPEAKBRIDGE_TEST_EXECUTABLE` 为当前可执行文件绝对路径。工作区测试首次 OCR 会下载英文模型，不上传截图或使用付费 API。
 
-本机证据如 `test-artifacts/package-0.7.11-verification.json`、`cleanup-package-0.7.11.json` 与 `dictation-cleanup/` 不纳入 Git。本文保留脱敏摘要和可复现测试入口，不伪装成源码中自带全部截图／日志。当前安装应用曾因仍在运行而未自动替换；此次文档工作没有操作它。
+本机证据位于 `test-artifacts/workspace/`、`workspace-package/` 和听写测试目录，不纳入 Git。截图／录音均为合成样例。现行功能与使用限制见[本地工作区指南](guides/local-workspace.md)，完整需求对应见[功能范围](local-features-plan.md)。
+
+## 既有语音与文字能力的证据边界
+
+0.7.11 的 Codex 固定文本整理为 8/8 预期结果，本机 Ollama `qwen3.5:2b` 为 3/8；这不是 ASR 准确率。0.7.10 的多语言、473 段长会议请求、取消及旧纪要保留通过模拟验证；当次真实服务返回 503，不是当前服务健康结论。本轮未重做 DeepSeek 实际会议或同音频原版对比，不能声称识别率提高或超过 Speakly / Typeless。
+
+原始方法与限制见[0.7.11 听写记录](archive/releases/0.7.11-dictation-cleanup.md)、[0.7.10 纪要记录](archive/releases/0.7.10-meeting-notes.md)、[0.4 语音评测](archive/reports/asr-quality-0.4.md)和[旧版 QA 汇编](archive/reports/qa-history.md)。历史报告中的通过仅适用于其版本与场景。
 
 ## 仓库、构建和发布
 
-| 面 | 状态（2026-11-04） |
-| --- | --- |
-| GitHub 仓库 | `aimasteracc/speakbridge`，公开，默认分支 `main`；保留脱敏后的源码历史 |
-| GitHub Release / 远程 CI | 无 Release，Actions 运行记录为 0；不能把本机包称为已发布下载 |
-| CI 配置 | 仅手动或 `v*` 标签触发，上传 Actions artifacts，不自动发布 Release |
-| 空白 Mac 构建 | **pending**：脚本需 .NET SDK + net48 参考程序集；macOS job 尚未设置交叉编译路径，见[开发指南](development.md#原生构建依赖) |
-| 本次包更新 | 未重打包；根目录素材说明及脚本帮助路径的文档改动不在旧包内，不能声称旧包与整理后的全部文件一致 |
+公开仓库为 `aimasteracc/speakbridge`，默认分支 `main`。0.8.0 在 `codex/workspace-features-20261104` 开发，旧源码保留标签 `v0.7.11-before-workspace-features-20261104`。本机 ZIP 与 GitHub Release 是不同交付；本轮不自动发布正式 Release。
+
+CI 已补齐 .NET SDK / net48 参考程序集准备及 Windows arm64 job，仅手动或 `v*` 标签触发，上传 Actions artifacts。远程执行结果尚待确认，不把配置完成记作远程通过。版本包和全部源码的一致性以最终重新打包校验为准。
 
 ## 公开前的隐私处理（2026-11-04）
 

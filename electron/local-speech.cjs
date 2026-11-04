@@ -7,6 +7,8 @@ const { trimOverlap } = require('./speech-segments.cjs');
 const { cleanSpeechText } = require('./speech-text.cjs');
 
 function validateLocalSpeech(settings) {
+  if (settings.localModel === 'qwen3-asr' && settings.sourceLanguage !== 'auto' && !require('./qwen-languages.json')[settings.sourceLanguage]) throw new Error('Qwen3-ASR 不支持所选语言，请选择 Whisper 或其他语言。');
+  if (settings.localModel === 'whisper-base' && settings.sourceLanguage === 'yue') throw new Error('Whisper Base 不支持粤语代码，请选择 SenseVoice、Qwen3-ASR 或 Whisper Turbo。');
   if (['sensevoice', 'ensemble'].includes(settings.localModel) && !['auto', 'zh', 'ja', 'en', 'ko', 'yue'].includes(settings.sourceLanguage)) throw new Error('该语言请在设置中选择 Qwen3-ASR 或 Whisper；SenseVoice / 增强模式支持中、日、英、韩语。');
   // Reserve the finite decoder context for audio and output. Reject an oversized
   // prompt rather than silently letting the native decoder truncate speech.
@@ -28,6 +30,7 @@ class WhisperManager {
   }
   installed(model = 'sensevoice') { return assetsInstalled(this.cacheDir, model) && (model !== 'whisper-base' || fs.existsSync(path.join(this.cacheDir, '.whisper-ready.json'))); }
   async prepare(allowDownload = false, model = 'sensevoice', language = 'auto') {
+    validateLocalSpeech({ localModel: model, sourceLanguage: language });
     if (['sensevoice', 'ensemble'].includes(model) && !['auto', 'zh', 'ja', 'en', 'ko', 'yue'].includes(language)) throw new Error('SenseVoice / 增强模式支持中、日、英、韩语；其他语言请在设置中选择 Qwen3-ASR 或 Whisper。');
     const key = model + ':' + (['sensevoice', 'whisper-turbo', 'ensemble'].includes(model) ? language : 'auto');
     if (this.ready && this.readyKey === key && !allowDownload) return;

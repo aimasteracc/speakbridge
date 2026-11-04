@@ -50,6 +50,7 @@ class NativeInput {
           try {
             const reply = JSON.parse(line);
             if (reply.event === 'hold' && typeof reply.pressed === 'boolean') { this.onEvent(reply); continue; }
+            if (reply.event === 'shortcut' || reply.event === 'capture-key') { this.onEvent(reply); continue; }
             if (reply.event === 'watch-error') { this.onEvent(reply); continue; }
             const job = this.pending.get(reply.id);
             if (job) { this.pending.delete(reply.id); clearTimeout(job.timer); job.resolve(reply); }

@@ -37,3 +37,13 @@ pinned source and MIT notice are documented in the
 are review material, not a source of production icon glyphs.
 The production UI must use the verified SVG icon library or documented project
 artwork; do not extract assets from a reference application's screenshots.
+
+## Local workspace dependencies (0.8.0)
+
+- `docx` 9.15.2, MIT: [original notice](licenses/Docx-MIT.txt), [upstream](https://github.com/dolanmiu/docx).
+- `unified` 11.0.5 and `remark-parse` 11.0.0, MIT: [unified notice](licenses/Unified-MIT.txt), [remark-parse notice](licenses/RemarkParse-MIT.txt). Markdown exports use these packages alongside the existing `remark-gfm`.
+- `tesseract.js` 7.0.0 and `tesseract.js-core` 7.0.0, Apache-2.0: [JavaScript license](licenses/TesseractJS-Apache-2.0.txt), [core license](licenses/TesseractCore-Apache-2.0.txt), [upstream](https://github.com/naptha/tesseract.js). Language data is downloaded on first use from `tessdata.projectnaptha.com`, not bundled with the app; the upstream Tesseract language-data terms apply.
+- Native OCR image-library notices (Leptonica, JPEG, PNG, TIFF, WebP, GIF, zlib and Openlibm), with pinned source references: [OCR notices](licenses/OCR-SOURCES.md). This software is based in part on the work of the Independent JPEG Group.
+- Language codes follow the factual list in [OpenAI Whisper](https://github.com/openai/whisper/blob/main/whisper/tokenizer.py); Qwen language names follow the [Qwen3-ASR model card](https://huggingface.co/Qwen/Qwen3-ASR-1.7B). No model weights or proprietary application code are included in these tables.
+
+Keep the dependency packages' own license files in redistributed builds. The new UI continues to use the Lucide/Feather notices above; it does not reuse Speakly assets. This list supplements the earlier UI inventory and is not a complete audit of every transitive native library.

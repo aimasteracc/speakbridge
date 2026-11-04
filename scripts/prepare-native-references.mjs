@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+import AdmZip from 'adm-zip';
+const directory = path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'speakbridge-net48-references');
+const response = await fetch('https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net48/1.0.3/microsoft.netframework.referenceassemblies.net48.1.0.3.nupkg');
+if (!response.ok) throw new Error('Unable to download net48 reference assemblies.');
+const data = Buffer.from(await response.arrayBuffer());
+if (crypto.createHash('sha256').update(data).digest('hex') !== '8a7e348538e7eb91351696911689f49e3d4f63f8bab517432bbe159b8b1104a2') throw new Error('net48 reference archive checksum mismatch.');
+new AdmZip(data).extractAllTo(directory, true);
+const sdk = process.env.DOTNET_ROOT;
+if (!sdk || !fs.existsSync(path.join(sdk, process.platform === 'win32' ? 'dotnet.exe' : 'dotnet'))) throw new Error('Run setup-dotnet first, or set DOTNET_ROOT.');
+const output = `SPEAKBRIDGE_DOTNET_DIR=${sdk}\nSPEAKBRIDGE_NET48_REFS=${path.join(directory, 'build', '.NETFramework', 'v4.8')}\n`;
+if (process.env.GITHUB_ENV) fs.appendFileSync(process.env.GITHUB_ENV, output); else console.log(output);

@@ -15,7 +15,8 @@ const version = require('../package.json').version, output = path.resolve(__dirn
     await context.addInitScript(({ boot }) => {
       const listeners = [];
       window.__ready = patch => { Object.assign(boot.dictation, patch); for (const fn of listeners) fn({ type: 'dictation-readiness', payload: structuredClone(boot.dictation) }); };
-      window.speakbridge = { bootstrap: async () => structuredClone(boot), onEvent: fn => { listeners.push(fn); return () => {}; }, dictationStatus: async () => structuredClone(boot.dictation), warmDictation: async () => structuredClone(boot.dictation), saveDictationPreferences: async preferences => { window.__ready({ preferences }); return structuredClone(boot.dictation); } };
+      let shortcuts = { bindings: { hold: ['fn'], dictation: ['CommandOrControl+Shift+D'], meeting: [], overlay: [], capture: [], clipboard: [] }, errors: [], nativeAvailable: true };
+      window.speakbridge = { shortcutsGet: async () => structuredClone(shortcuts), shortcutsSave: async bindings => { shortcuts = { ...shortcuts, bindings }; window.__ready({ holdBindings: bindings.hold, handsFreeBindings: bindings.dictation }); return structuredClone(shortcuts); }, bootstrap: async () => structuredClone(boot), onEvent: fn => { listeners.push(fn); return () => {}; }, dictationStatus: async () => structuredClone(boot.dictation), warmDictation: async () => structuredClone(boot.dictation), saveDictationPreferences: async preferences => { window.__ready({ preferences }); return structuredClone(boot.dictation); } };
       // No OS microphone access in this UI regression test.
       Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: async () => ({ getTracks: () => [{ stop() {} }] }) });
     }, { boot });
@@ -38,9 +39,11 @@ const version = require('../package.json').version, output = path.resolve(__dirn
     checks.push('explicit hands-free mode is ready when its own shortcut and permissions are available');
     await page.evaluate(() => window.__ready({ preferences: { holdKey: 'fn', handsFreeShortcut: 'CommandOrControl+Shift+D' }, holdAvailable: true }));
     await page.getByRole('button', { name: '修改快捷键' }).click();
-    await page.getByRole('button', { name: '改用右 Option', exact: true }).click();
-    assert.equal(await page.getByLabel('按住说话快捷键').inputValue(), 'rightalt');
-    checks.push('Fn warning offers a direct Right Option switch without opening a native select menu');
+    await page.getByRole('button', { name: '删除快捷键 fn', exact: true }).click();
+    await page.getByRole('button', { name: '添加快捷键', exact: true }).first().click();
+    await page.getByRole('group', { name: '添加按住说话快捷键', exact: true }).getByRole('combobox').selectOption('rightalt');
+    await page.getByRole('button', { name: '删除快捷键 rightalt', exact: true }).waitFor();
+    checks.push('shortcut editor removes Fn and adds Right Option through the new multiple-binding settings');
     assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ passed: true, version, checks, pageErrors: errors }, null, 2)); console.log(JSON.stringify({ passed: true, checks }));
   } finally { await browser?.close(); await server.close(); }

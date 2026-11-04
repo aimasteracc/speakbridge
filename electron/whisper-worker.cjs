@@ -24,7 +24,7 @@ const { consensus } = require('./transcript-consensus.cjs');
     return async (audio, language, dictionary = []) => {
       const stream = recognizer.createStream();
       if (model === 'qwen3-asr') {
-        const languages = { zh: 'Chinese', ja: 'Japanese', en: 'English', ko: 'Korean', es: 'Spanish', fr: 'French', de: 'German' };
+        const languages = require('./qwen-languages.json');
         if (language !== 'auto') stream.setOption('language', languages[language]);
         stream.setOption('hotwords', dictionary.join(','));
       }

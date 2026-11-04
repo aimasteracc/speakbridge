@@ -10,6 +10,8 @@ const executablePath = process.env.SPEAKBRIDGE_TEST_EXECUTABLE;
 const output = path.join(root, 'test-artifacts');
 fs.mkdirSync(output, { recursive: true });
 const dataDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'speakbridge-e2e-'));
+fs.writeFileSync(path.join(dataDirectory, 'dictation-settings.json'), JSON.stringify({ holdKey: 'off', handsFreeShortcut: 'off' }));
+fs.writeFileSync(path.join(dataDirectory, 'shortcuts.json'), JSON.stringify({ hold: [], dictation: [], meeting: [], overlay: [], capture: [], clipboard: [] }));
 let clipboardBackup;
 let app, page, pcmBytes = 0, turn = 0, translateCalls = 0;
 const failures = [];
@@ -20,7 +22,7 @@ const server = http.createServer(async (req, res) => {
   const body = JSON.parse(data); assert.equal(body.store, false);
   translateCalls++;
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ output: [{ content: [{ type: 'output_text', text: body.instructions.includes('纪要') ? '讨论要点：跨平台实时翻译。\n已达成的决定：发布桌面版本。\n待办事项：验证系统权限。责任人未明确。' : 'Windows 和 Mac 都能使用实时翻译。' }] }] }));
+  res.end(JSON.stringify({ output: [{ content: [{ type: 'output_text', text: (body.instructions.includes('纪要') || body.instructions.includes('議事録')) ? '讨论要点：跨平台实时翻译。\n已达成的决定：发布桌面版本。\n待办事项：验证系统权限。责任人未明确。' : 'Windows 和 Mac 都能使用实时翻译。' }] }] }));
 });
 const ws = new WebSocketServer({ server });
 ws.on('connection', socket => socket.on('message', data => {
@@ -38,6 +40,9 @@ async function launch() {
   const env = { ...process.env, SPEAKBRIDGE_DATA_DIR: dataDirectory }; delete env.ELECTRON_RUN_AS_NODE; delete env.SPEAKBRIDGE_DEV_URL;
   app = await electron.launch({ ...(executablePath ? { executablePath, args: ['--user-data-dir=' + dataDirectory] } : { args: [root] }), env, timeout: 30000 });
   assert.equal(fs.realpathSync(await app.evaluate(({ app }) => app.getPath('userData'))), fs.realpathSync(dataDirectory));
+  // Keep the system clipboard untouched; these scenarios verify renderer/IPC
+  // behavior, while native clipboard interoperability is a separate OS check.
+  await app.evaluate(({ clipboard, ClipboardItem }) => { let items = []; clipboard.read = async () => items; clipboard.write = async value => { items = value; }; clipboard.writeText = async text => { items = [new ClipboardItem({ 'text/plain': text })]; }; clipboard.readText = async () => { for (const item of items) if (item.types.includes('text/plain')) return (await item.getType('text/plain')).text(); return ''; }; });
   if (!clipboardBackup) clipboardBackup = await app.evaluate(async ({ clipboard }) => {
     const result = [];
     for (const item of await clipboard.read()) {
@@ -81,7 +86,7 @@ async function waitIdle() { await page.getByRole('button', { name: /开始会话
       await page.getByLabel('搜索历史记录').fill('不存在的词条');
       await page.getByText('没有找到匹配的会话').waitFor();
       await page.getByLabel('搜索历史记录').fill('');
-      await page.getByRole('button', { name: /跨语言产品会议 · 演示/ }).click();
+      await page.locator('.history-open').filter({ hasText: '跨语言产品会议 · 演示' }).click();
       await page.getByLabel('会话标题').fill('重命名后的双语会话');
       await page.getByRole('button', { name: '复制', exact: true }).click();
       await page.getByText('已复制会话文本').waitFor();
@@ -126,14 +131,23 @@ async function waitIdle() { await page.getByRole('button', { name: /开始会话
       await page.getByRole('button', { name: /开始会话/ }).click();
       await page.getByRole('button', { name: /结束会话/ }).waitFor();
       await page.waitForFunction(() => document.querySelector('.volume-meter span')?.getAttribute('style') !== 'width: 0%;');
+      // Record the already running meeting mix with a synthetic moving screen.
+      await app.evaluate(({ desktopCapturer, nativeImage }) => { desktopCapturer.getSources = async () => [{ id: 'screen:fixture:0', name: 'Synthetic meeting screen', thumbnail: nativeImage.createEmpty() }]; });
+      await page.evaluate(() => { const screenFixture = async () => { const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 360; const ctx = canvas.getContext('2d'); let n = 0; const timer = setInterval(() => { ctx.fillStyle = '#153d32'; ctx.fillRect(0, 0, 640, 360); ctx.fillStyle = '#fff'; ctx.fillRect((n++ * 5) % 600, 100, 40, 100); }, 33); const stream = canvas.captureStream(30), track = stream.getVideoTracks()[0], stop = track.stop.bind(track); track.stop = () => { clearInterval(timer); stop(); }; return stream; }; Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', { configurable: true, value: screenFixture }); });
+      await page.getByRole('button', { name: '画面录制', exact: true }).click(); await page.getByRole('button', { name: '预览画面', exact: true }).click(); await page.getByRole('button', { name: '开始录制', exact: true }).click(); await page.getByText('正在采集画面', { exact: true }).waitFor();
+      await page.getByRole('button', { name: '暂停会议', exact: true }).click();
+      await page.getByRole('button', { name: '继续会议', exact: true }).waitFor(); const pausedBytes = pcmBytes; await page.waitForTimeout(450); assert.equal(pcmBytes, pausedBytes);
+      const toolbar = app.windows().find(w => w.url().endsWith('#toolbar')); assert.ok(toolbar); await toolbar.getByRole('button', { name: '继续会议', exact: true }).click();
+      await page.getByRole('button', { name: '暂停会议', exact: true }).waitFor();
       // Deliberately stop before the 8 s automatic commit, exercising final PCM flush.
       await page.waitForTimeout(1100);
       await page.getByRole('button', { name: /结束会话/ }).click(); await waitIdle();
       assert.ok(pcmBytes > 24000); assert.ok(turn >= 1); assert.ok(translateCalls >= 2);
       const records = await page.evaluate(() => window.speakbridge.listSessions());
       const actual = records.find(row => !row.demo);
+      const videos = await page.evaluate(id => window.speakbridge.mediaList(id), actual.id); assert.equal(videos.length, 1); assert.equal(videos[0].audio, 'meeting'); assert.equal(videos[0].mime, 'video/mp4'); assert.ok(videos[0].durationMs > 1000);
       assert.equal(actual.audioSource, 'both'); assert.ok(actual.segments[0].translation.includes('Windows'));
-      await page.getByRole('button', { name: /Windows と Mac で/ }).click();
+      await page.locator('.history-open').filter({ hasText: 'Windows と Mac で' }).click();
       await page.getByRole('dialog').getByRole('button', { name: '会议纪要', exact: true }).click();
       await page.getByRole('button', { name: '生成会议纪要' }).click();
       await page.getByText(/讨论要点：跨平台实时翻译。/).waitFor();

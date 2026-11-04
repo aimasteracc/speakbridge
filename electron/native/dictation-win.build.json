@@ -1,5 +1,5 @@
 {
-  "sourceSHA256": "971bef1680e798ff56ddddedb6a86be3ea7fb8d8e0f866c93a48e43d3f013c09",
-  "binarySHA256": "f2b276ebe6c09ad7768aa7619565a2e0fd49c940ef63285e3680ae3bb97345ab",
-  "target": "net48-x64"
+  "sourceSHA256": "32666a58f4e7fab77eecba3623448c6d57c8ecd0ae8c45c5d898c542645d887c",
+  "binarySHA256": "2066b265c5dfd8427e7e492cf1abcbaea46cfa9e8b9fd0a31a6a1d1ba1d3ecf9",
+  "target": "net48-anycpu"
 }
