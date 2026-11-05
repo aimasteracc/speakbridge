@@ -43,7 +43,11 @@ function scan(root) {
       if (!textExtensions.has(path.extname(entry.name)) && !['.env.example', '.env.sample', '.gitignore', 'LICENSE'].includes(entry.name)) continue;
       if (file === 'electron/asr-runtime.mjs') continue;
       filesScanned++;
-      for (const finding of inspect(fs.readFileSync(absolute, 'utf8'))) findings.push({ file, ...finding });
+      for (const finding of inspect(fs.readFileSync(absolute, 'utf8'))) {
+        // Preserve the required upstream public copyright attribution, not user contact data.
+        if (finding.category === 'personal-email' && finding.line === 3 && ['licenses/RemarkParse-MIT.txt', 'licenses/Unified-MIT.txt'].includes(file)) continue;
+        findings.push({ file, ...finding });
+      }
     }
   }
   walk(root);

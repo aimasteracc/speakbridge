@@ -1,3 +1,4 @@
+import languageLabels from '../electron/languages.json';
 export type AudioSource = 'microphone' | 'system' | 'both';
 export type Settings = {
   speechProvider: 'auto' | 'api' | 'soniox' | 'local'; localModel: 'sensevoice' | 'whisper-base' | 'qwen3-asr' | 'whisper-turbo' | 'ensemble'; textProvider: 'auto' | 'api' | 'codex' | 'claude' | 'deepseek' | 'ollama' | 'harness';
@@ -8,26 +9,64 @@ export type Settings = {
   speechThreshold: number; subtitleFontSize: number; dictionary: string[];
   hasKey: boolean; hasSonioxKey: boolean; canEncrypt: boolean | null; keyError?: string; sonioxKeyError?: string;
   notesContextTokens: number; notesOutputTokens: number; notesTimeoutSeconds: number;
+  meetingReminder: boolean; spokenLanguages: string[]; autoNotes: boolean; autoNotesLanguage: NotesLanguage; idleStopMinutes: number;
 };
 export type Engines = { speech: string; text: string };
 export type Capabilities = { codex: string; claude: string; deepseek: string; harness: string; localInstalled: boolean; localReady: boolean; localModels: Record<Settings['localModel'], boolean> };
 export const engineNames: Record<string, string> = { api: 'API', soniox: 'Soniox 实时转写', local: '本地语音', codex: 'Codex', claude: 'Claude Code', deepseek: 'DeepSeek Harness', ollama: 'Ollama', harness: 'Harness', off: '关闭翻译' };
 export const modelNames: Record<Settings['localModel'], string> = { ensemble: '增强识别', 'qwen3-asr': 'Qwen3-ASR 1.7B', 'whisper-turbo': 'Whisper Turbo', sensevoice: 'SenseVoice', 'whisper-base': 'Whisper Base' };
-export type Segment = { id: string; text: string; translation: string; startMs: number; endMs: number; final: boolean; error?: string; translationError?: string; pending?: string };
+export type Segment = { speaker?: string; id: string; text: string; translation: string; startMs: number; endMs: number; final: boolean; error?: string; translationError?: string; pending?: string };
 export type InputDiagnostics = { stage?: string; code?: string; role?: string; subrole?: string; selectionAvailable?: boolean; enabled?: boolean; editable?: boolean; readOnly?: boolean };
 export type CleanupProvider = 'off' | 'ollama' | 'api' | 'codex' | 'claude' | 'deepseek' | 'harness';
 export type DictationResult = { status: 'pending' | 'inserted' | 'sent' | 'retained' | 'cancelled' | 'empty'; text: string; rawText?: string; cleanup?: { provider: CleanupProvider; status: 'applied' | 'unchanged' | 'failed'; message?: string; elapsedMs: number }; targetName: string; message: string; retryable?: boolean; diagnostics?: InputDiagnostics };
 export type DictationPreferences = { holdKey: 'fn' | 'rightalt' | 'rightctrl' | 'off'; handsFreeShortcut: string; cleanupProvider: CleanupProvider };
-export type DictationReadiness = { preferences: DictationPreferences; holdAvailable: boolean; handsFreeAvailable: boolean; inputAvailable: boolean; microphonePermission: string; modelInstalled: boolean; modelReady: boolean; message: string };
+export type DictationReadiness = { holdBindings?: string[]; handsFreeBindings?: string[]; preferences: DictationPreferences; holdAvailable: boolean; handsFreeAvailable: boolean; inputAvailable: boolean; microphonePermission: string; modelInstalled: boolean; modelReady: boolean; message: string };
 export type DictationFeedback = { phase: 'selecting' | 'preparing' | 'listening' | 'finishing' | 'polishing' | 'inserting' | 'done'; mode: 'hold' | 'handsfree'; targetName: string; message: string };
 export type NotesLanguage = 'auto' | 'zh' | 'ja' | 'en';
 export type NotesStatus = { id: string; state: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'; message: string; startedAt?: number; stage?: string; received?: number; completed?: number; total?: number; language?: NotesLanguage };
 export type NotesPlan = { language: Exclude<NotesLanguage, 'auto'>; model: string; contextTokens: number; outputTokens: number; maxOutputTokens: number; inputTokens: number; timeoutMs: number; mode: 'direct' | 'chunked'; source: string };
-export type Session = { id: string; title: string; startedAt: number; endedAt?: number; durationMs: number; audioSource: AudioSource; sourceLanguage: string; targetLanguage: string; demo: boolean; segments: Segment[]; notes: string; notesLanguage?: NotesLanguage; notesError?: string; notesGeneratedAt?: number; starred: boolean; status: string; engines?: Engines; speechModel?: Settings['localModel']; mode?: 'dictation'; dictation?: DictationResult };
-export type SessionState = { status: 'idle' | 'connecting' | 'recording' | 'stopping'; session: Session | null; error: string };
-export type Bootstrap = { settings: Settings; sessions: Session[]; state: SessionState; platform: string; osVersion: string; appVersion: string; shortcutAvailable: boolean; dictationShortcutAvailable: boolean; dictation: DictationReadiness; dictationFeedback?: DictationFeedback; dataDirectory: string; capabilities: Capabilities };
+export type Session = { mediaIds?: string[]; pausedMs?: number; pauseStartedAt?: number; id: string; title: string; startedAt: number; endedAt?: number; durationMs: number; audioSource: AudioSource; sourceLanguage: string; targetLanguage: string; demo: boolean; segments: Segment[]; notes: string; notesLanguage?: NotesLanguage; notesError?: string; notesGeneratedAt?: number; starred: boolean; status: string; engines?: Engines; speechModel?: Settings['localModel']; mode?: 'dictation'; dictation?: DictationResult };
+export type MediaAsset = { id: string; title: string; kind: 'video' | 'image'; mime: string; createdAt: number; bytes: number; durationMs: number; width: number; height: number; sessionId: string; startMs: number; audio: string; url: string; posterUrl: string };
+export type DataStats = Record<'sessions' | 'media' | 'clipboard' | 'questions' | 'memories' | 'partial' | 'ocr', { count: number; bytes: number }>;
+export type ScreenQuestionData = { records: { id: string; imageId: string; question: string; answer: string; createdAt: number }[]; memories: { id: string; text: string; createdAt: number }[] };
+export type ShortcutAction = 'hold' | 'dictation' | 'meeting' | 'overlay' | 'capture' | 'clipboard';
+export type ShortcutState = { bindings: Record<ShortcutAction, string[]>; errors: string[]; nativeAvailable: boolean };
+export type ClipboardEntry = { id: string; kind: 'text' | 'rich' | 'image' | 'files'; text: string; image: string; bytes: number; createdAt: number };
+export type ClipboardStatus = { enabled: boolean; count: number; bytes: number; limit: number };
+export type CaptureSource = { id: string; name: string; thumbnail: string; kind: 'screen' | 'window' };
+export type SessionState = { capture?: { startedAt: number; paused: boolean; pausedMs: number; pausedAt: number }; status: 'idle' | 'connecting' | 'recording' | 'paused' | 'stopping'; session: Session | null; error: string };
+export type Bootstrap = { shortcuts?: ShortcutState; settings: Settings; sessions: Session[]; state: SessionState; platform: string; osVersion: string; appVersion: string; shortcutAvailable: boolean; dictationShortcutAvailable: boolean; dictation: DictationReadiness; dictationFeedback?: DictationFeedback; dataDirectory: string; capabilities: Capabilities };
 export type BridgeEvent = { type: string; payload: unknown };
 export type Bridge = {
+  dataStats(): Promise<DataStats>;
+  dataClear(kind: keyof DataStats): Promise<DataStats>;
+  checkUpdate(): Promise<string>;
+  screenList(): Promise<ScreenQuestionData>;
+  screenOCR(id: string, language: string): Promise<string>;
+  screenAsk(input: { imageId: string; text: string; question: string; useMemory: boolean }): Promise<ScreenQuestionData['records'][number]>;
+  screenCancel(): Promise<boolean>;
+  screenMemory(text: string): Promise<ScreenQuestionData>;
+  screenDelete(kind: 'records' | 'memories', ids: string[]): Promise<ScreenQuestionData>;
+  toolbarAction(command: 'pause' | 'stop' | 'capture'): Promise<void>;
+  shortcutsGet(): Promise<ShortcutState>;
+  shortcutsSave(bindings: ShortcutState["bindings"]): Promise<ShortcutState>;
+  captureKeys(enabled: boolean): Promise<void>;
+  clipboardList(): Promise<{ items: ClipboardEntry[]; status: ClipboardStatus }>;
+  clipboardConfigure(enabled: boolean): Promise<ClipboardStatus>;
+  clipboardCopy(id: string, paste?: boolean): Promise<string>;
+  clipboardDelete(ids: string[]): Promise<ClipboardEntry[]>;
+  mediaCopy(id: string): Promise<boolean>;
+  captureSources(kind: 'screen' | 'window'): Promise<CaptureSource[]>;
+  chooseCaptureSource(id: string): Promise<void>;
+  mediaList(sessionId?: string): Promise<MediaAsset[]>;
+  mediaBegin(input: { mime: string; title: string; audio: string; sessionId?: string; startMs?: number }): Promise<string>;
+  mediaAppend(id: string, sequence: number, bytes: Uint8Array): Promise<number>;
+  mediaFinish(id: string, metadata: { durationMs: number; width: number; height: number; poster?: Uint8Array }): Promise<MediaAsset>;
+  mediaAbandon(id: string): Promise<boolean>;
+  mediaCancel(id: string): Promise<boolean>;
+  mediaDelete(ids: string[]): Promise<MediaAsset[]>;
+  mediaExport(id: string): Promise<boolean>;
+  pause(paused: boolean): Promise<SessionState>;
   bootstrap(): Promise<Bootstrap>;
   saveSettings(value: Settings & { apiKey?: string; sonioxApiKey?: string }): Promise<Settings>;
   testConnection(): Promise<boolean>;
@@ -54,6 +93,7 @@ export type Bridge = {
   deleteNotes(id: string): Promise<Session>;
   deleteSessions(ids: string[]): Promise<Session[]>;
   deleteNotesMany(ids: string[]): Promise<Session[]>;
+  setSpeaker(id: string, segmentIds: string[], speaker: string): Promise<Session>;
   updateSession(id: string, patch: { title?: string; starred?: boolean }): Promise<Session>;
   exportSession(id: string, format: string): Promise<boolean>;
   copySession(id: string): Promise<boolean>;
@@ -67,7 +107,7 @@ export type Bridge = {
   onEvent(callback: (event: BridgeEvent) => void): () => void;
 };
 declare global { interface Window { speakbridge: Bridge } }
-export const languages: Record<string, string> = { zh: '简体中文', ja: '日本語', en: 'English', ko: '한국어', es: 'Español', fr: 'Français', de: 'Deutsch' };
+export const languages: Record<string, string> = languageLabels;
 export const sourceNames = { microphone: '麦克风', system: '系统音频', both: '麦克风 + 系统音频' };
 export function duration(ms: number) { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`; }
 export function dateTime(time: number) { return new Date(time).toLocaleString('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }

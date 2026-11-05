@@ -1,6 +1,6 @@
 # 文档索引
 
-这里维护声桥当前源码的使用和开发说明。版本以 [package.json](../package.json) 为准；本文整理基线为 **0.7.11，2026-11-03**。本机正在运行的应用、打包产物和 GitHub 源码可能处于不同版本，验证结论统一记录在[验证状态](verification.md)。
+这里维护声桥当前源码的使用和开发说明。版本以 [package.json](../package.json) 为准；本文整理基线为 **0.8.0，2026-11-04**。本机正在运行的应用、打包产物和 GitHub 源码可能处于不同版本，验证结论统一记录在[验证状态](verification.md)。
 
 ## 使用声桥
 
@@ -10,6 +10,7 @@
 | 安装、首次启动、录制会议、切换配色 | [开始使用](guides/getting-started.md) |
 | 配置 DeepSeek API、本地模型、Codex / Claude / Harness | [引擎与连接配置](guides/engines.md) |
 | 用快捷键说话，并自动填入其他应用 | [跨应用听写](guides/dictation.md) |
+| 录屏、长截图、剪贴板、多快捷键、屏幕问答 | [本地工作空间](guides/local-workspace.md) |
 | 生成中日英纪要、处理长会议、删除历史 | [会议纪要与记录管理](guides/meeting-notes.md) |
 | 排查缺少密钥、无法输入、权限或生成失败 | [故障排查](guides/troubleshooting.md) |
 | 确认数据存放、外部发送和费用边界 | [数据与隐私](security.md) |
@@ -20,6 +21,7 @@
 | --- | --- |
 | 环境依赖、开发命令、测试、打包与 CI | [开发指南](development.md) |
 | 音频、文字、听写和存储的数据流 | [架构说明](architecture.md) |
+| 本地功能需求与交付范围 | [本地功能扩展](local-features-plan.md) |
 | 哪些已验证、哪些尚未实机验收 | [验证状态](verification.md) |
 | 自动化开发的项目约定 | [AGENTS.md](../AGENTS.md) |
 | 各版本的变化 | [版本记录](../CHANGELOG.md) |

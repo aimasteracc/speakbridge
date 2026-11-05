@@ -10,7 +10,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            arch: universal
+          - os: windows-latest
+            arch: x64
+          - os: windows-11-arm
+            arch: arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -20,17 +26,23 @@ jobs:
           cache: npm
       - run: npm run check:sensitive
       - run: npm ci
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: node scripts/prepare-native-references.mjs
       - run: npm test
       - run: npm run build
+      - run: node tests/native-protocol-smoke.cjs
+      - run: node -e "require('onnxruntime-node'); require('sherpa-onnx-node')"
       - if: runner.os == 'macOS'
         run: npx electron-builder --mac zip --arm64 --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - if: runner.os == 'Windows'
-        run: npx electron-builder --win nsis zip --x64 --publish never
+        run: npx electron-builder --win nsis zip --${{ matrix.arch }} --publish never
       - uses: actions/upload-artifact@v4
         with:
-          name: SpeakBridge-${{ runner.os }}
+          name: SpeakBridge-${{ runner.os }}-${{ matrix.arch }}
           path: |
             release/*.zip
             release/*.exe

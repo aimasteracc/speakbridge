@@ -1,5 +1,5 @@
 const SOURCES = ['microphone', 'system', 'both'];
-const LANGUAGES = { zh: '简体中文', ja: '日本語', en: 'English', ko: '한국어', es: 'Español', fr: 'Français', de: 'Deutsch' };
+const LANGUAGES = require('./languages.json');
 const DEFAULT_SETTINGS = {
   speechProvider: 'auto', localModel: 'sensevoice', textProvider: 'auto', codexPath: '', claudePath: '', deepseekPath: '', deepseekHome: '',
   ollamaUrl: 'http://127.0.0.1:11434', ollamaModel: 'qwen2.5:7b', harnessPath: '', harnessArgs: '[]',
@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
   audioSource: 'microphone', microphoneId: '', viewMode: 'transcript',
   silenceMs: 700, speechThreshold: 0.012, subtitleFontSize: 24, dictionary: [],
   notesContextTokens: 0, notesOutputTokens: 0, notesTimeoutSeconds: 600,
+  meetingReminder: false, spokenLanguages: [], autoNotes: false, autoNotesLanguage: 'auto', idleStopMinutes: 0,
 };
 function validateSettings(input) {
   const result = { ...DEFAULT_SETTINGS };
@@ -35,6 +36,11 @@ function validateSettings(input) {
   if (!Number.isFinite(result.subtitleFontSize) || result.subtitleFontSize < 16 || result.subtitleFontSize > 40) throw new Error('字幕字号必须为 16–40。');
   if (!Array.isArray(result.dictionary) || result.dictionary.length > 100 || result.dictionary.some(x => typeof x !== 'string' || !x.trim() || x.length > 80 || /[<>\r\n]/.test(x))) throw new Error('词典最多 100 项，每项最多 80 字，不含换行或尖括号。');
   result.dictionary = [...new Set(result.dictionary.map(x => x.trim()))];
+  if (!Array.isArray(result.spokenLanguages) || result.spokenLanguages.length > 5 || result.spokenLanguages.some(x => !Object.hasOwn(LANGUAGES, x))) throw new Error('请选择最多 5 种常用语言。');
+  result.spokenLanguages = [...new Set(result.spokenLanguages)];
+  if (typeof result.meetingReminder !== 'boolean') throw new Error('会议提醒设置无效。');
+  if (typeof result.autoNotes !== 'boolean' || !['auto', 'zh', 'ja', 'en'].includes(result.autoNotesLanguage)) throw new Error('无效的自动纪要设置。');
+  if (![0, 5, 10, 15, 30].includes(result.idleStopMinutes)) throw new Error('无效的静音自动结束时间。');
   for (const key of ['notesContextTokens', 'notesOutputTokens']) {
     if (!Number.isSafeInteger(result[key]) || result[key] < 0 || result[key] > 10000000 || (result[key] > 0 && result[key] < 1024)) throw new Error('纪要 token 预算须为 0（自动）或 1,024–10,000,000 的整数。');
   }
@@ -45,7 +51,8 @@ function realtimeConfig(settings) {
   const transcription = { model: settings.transcriptionModel };
   if (settings.transcriptionModel.startsWith('gpt-live-transcribe')) {
     transcription.delay = 'low';
-    if (settings.sourceLanguage !== 'auto') transcription.languages = [settings.sourceLanguage];
+    const preferred = [...new Set([...(settings.sourceLanguage !== 'auto' ? [settings.sourceLanguage] : []), ...(settings.spokenLanguages || [])])];
+    if (preferred.length) transcription.languages = preferred;
     if (settings.dictionary.length) transcription.keywords = settings.dictionary;
   } else {
     if (settings.sourceLanguage !== 'auto') transcription.language = settings.sourceLanguage;
@@ -62,8 +69,8 @@ function timestamp(ms, srt = false) {
 }
 function exportSession(session, format) {
   const segments = [...session.segments].sort((a, b) => a.startMs - b.startMs).filter(s => s.text.trim());
-  if (format === 'srt') return segments.map((s, i) => `${i + 1}\n${timestamp(s.startMs, true)} --> ${timestamp(Math.max(s.startMs + 500, s.endMs), true)}\n${[s.text, s.translation].filter(Boolean).join('\n')}`).join('\n\n') + '\n';
-  const body = segments.map(s => `[${timestamp(s.startMs)}] ${s.text}${s.translation ? '\n' + s.translation : ''}`).join('\n\n');
+  if (format === 'srt') return segments.map((s, i) => `${i + 1}\n${timestamp(s.startMs, true)} --> ${timestamp(Math.max(s.startMs + 500, s.endMs), true)}\n${[s.speaker ? s.speaker + '：' + s.text : s.text, s.translation].filter(Boolean).join('\n')}`).join('\n\n') + '\n';
+  const body = segments.map(s => `[${timestamp(s.startMs)}] ${s.speaker ? s.speaker + '：' : ''}${s.text}${s.translation ? '\n' + s.translation : ''}`).join('\n\n');
   return `${format === 'md' ? '# ' : ''}${session.title}${session.demo ? ' [演示]' : ''}\n${new Date(session.startedAt).toLocaleString('zh-CN')}\n\n${body}\n${session.notes ? '\n会议纪要\n' + session.notes : ''}`;
 }
 // PCM clock is independent of network timing. Keep 300 ms of pre-roll, commit

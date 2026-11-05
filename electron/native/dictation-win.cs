@@ -8,7 +8,7 @@ using System.Web.Script.Serialization;
 using System.Windows.Automation;
 using System.Windows.Automation.Text;
 
-// Uses the Windows inbox .NET Framework. No clipboard, shell command or Enter.
+// Uses the Windows inbox .NET Framework. No shell commands or automatic Enter.
 public class DictationInput {
     [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public INPUTUNION data; }
     [StructLayout(LayoutKind.Explicit)] struct INPUTUNION {
@@ -81,6 +81,7 @@ public class DictationInput {
                 Action action; while (hookActions.TryDequeue(out action)) action();
             } else { TranslateMessage(ref message); DispatchMessage(ref message); }
         }
+        ClearWorkspace();
         ReleaseHold();
         if (hook != IntPtr.Zero) UnhookWindowsHookEx(hook);
         hook = IntPtr.Zero; watchedKey = 0;
@@ -115,6 +116,107 @@ public class DictationInput {
         }
         return result;
     }
+    [StructLayout(LayoutKind.Sequential)] struct MSLLHOOKSTRUCT { public POINT point; public uint mouseData, flags, time; public UIntPtr extra; }
+    static readonly HookProc workspaceKeyProc = WorkspaceKey, workspaceMouseProc = WorkspaceMouse;
+    static IntPtr workspaceKeyHook, workspaceMouseHook;
+    static Dictionary<string, string> workspaceBindings = new Dictionary<string, string>();
+    static readonly HashSet<string> workspaceHeld = new HashSet<string>();
+    static bool displayKeys;
+    static bool WorkspaceGesture(string key, bool down) {
+        string action; if (!workspaceBindings.TryGetValue(key, out action)) return false;
+        bool was = workspaceHeld.Contains(key), owned = was || down;
+        if (was != down) { if (down) workspaceHeld.Add(key); else workspaceHeld.Remove(key); Output(new Dictionary<string, object> { { "event", "shortcut" }, { "action", action }, { "key", key }, { "pressed", down } }); }
+        return owned;
+    }
+    static IntPtr WorkspaceKey(int code, IntPtr message, IntPtr data) {
+        if (code >= 0) {
+            var value = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(data, typeof(KBDLLHOOKSTRUCT));
+            if ((value.flags & 0x10) == 0) {
+                int kind = message.ToInt32(); bool down = kind == 0x100 || kind == 0x104, up = kind == 0x101 || kind == 0x105;
+                string key = value.vkCode == 0xA5 ? "rightalt" : value.vkCode == 0xA3 ? "rightctrl" : "";
+                if ((down || up) && WorkspaceGesture(key, down)) return new IntPtr(1);
+                if (displayKeys && down) {
+                    string label = value.vkCode == 13 ? "Enter" : value.vkCode == 9 ? "Tab" : value.vkCode == 32 ? "Space" : value.vkCode == 8 ? "Delete" : value.vkCode == 27 ? "Esc" : value.vkCode >= 37 && value.vkCode <= 40 ? "Arrow" : null;
+                    if (label == null && ((GetAsyncKeyState(0x11) & 0x8000) != 0)) label = "Ctrl + Key";
+                    if (label != null) Output(new Dictionary<string, object> { { "event", "capture-key" }, { "label", label } });
+                }
+            }
+        }
+        return CallNextHookEx(workspaceKeyHook, code, message, data);
+    }
+    static IntPtr WorkspaceMouse(int code, IntPtr message, IntPtr data) {
+        if (code >= 0) {
+            var value = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(data, typeof(MSLLHOOKSTRUCT)); int kind = message.ToInt32();
+            if ((value.flags & 1) == 0 && (kind == 0x207 || kind == 0x208 || kind == 0x20B || kind == 0x20C)) {
+                string key = kind == 0x207 || kind == 0x208 ? "mouse-middle" : (value.mouseData >> 16) == 1 ? "mouse-back" : "mouse-forward";
+                if (WorkspaceGesture(key, kind == 0x207 || kind == 0x20B)) return new IntPtr(1);
+            }
+        }
+        return CallNextHookEx(workspaceMouseHook, code, message, data);
+    }
+    static void ClearWorkspace() {
+        foreach (string key in workspaceHeld) Output(new Dictionary<string, object> { { "event", "shortcut" }, { "action", workspaceBindings[key] }, { "key", key }, { "pressed", false } });
+        workspaceHeld.Clear();
+        if (workspaceKeyHook != IntPtr.Zero) UnhookWindowsHookEx(workspaceKeyHook); if (workspaceMouseHook != IntPtr.Zero) UnhookWindowsHookEx(workspaceMouseHook);
+        workspaceKeyHook = IntPtr.Zero; workspaceMouseHook = IntPtr.Zero;
+    }
+    static Dictionary<string, object> WorkspaceWatch(Dictionary<string, object> request) {
+        var next = new Dictionary<string, string>(); object raw;
+        if (request.TryGetValue("bindings", out raw)) foreach (var pair in (Dictionary<string, object>)raw) {
+            string action = Convert.ToString(pair.Value);
+            if (!new[] { "rightalt", "rightctrl", "mouse-middle", "mouse-back", "mouse-forward" }.Contains(pair.Key) || !new[] { "hold", "dictation", "meeting", "overlay", "capture", "clipboard" }.Contains(action)) return Result(false, "快捷键无效。");
+            next[pair.Key] = action;
+        }
+        Dictionary<string, object> result = null;
+        using (var done = new ManualResetEvent(false)) {
+            hookActions.Enqueue(() => {
+                try {
+                    ClearWorkspace(); workspaceBindings = next; displayKeys = request.ContainsKey("keys") && Convert.ToBoolean(request["keys"]);
+                    if (displayKeys || next.Keys.Any(x => !x.StartsWith("mouse-"))) workspaceKeyHook = SetWindowsHookEx(13, workspaceKeyProc, GetModuleHandle(null), 0);
+                    if (next.Keys.Any(x => x.StartsWith("mouse-"))) workspaceMouseHook = SetWindowsHookEx(14, workspaceMouseProc, GetModuleHandle(null), 0);
+                    bool available = (!displayKeys && !next.Keys.Any(x => !x.StartsWith("mouse-")) || workspaceKeyHook != IntPtr.Zero) && (!next.Keys.Any(x => x.StartsWith("mouse-")) || workspaceMouseHook != IntPtr.Zero);
+                    if (!available) ClearWorkspace(); result = new Dictionary<string, object> { { "ok", available }, { "available", available }, { "message", available ? "快捷键已就绪" : "快捷键监听失败。" } };
+                } catch { ClearWorkspace(); result = Result(false, "快捷键监听失败。"); }
+                finally { done.Set(); }
+            });
+            if (!PostThreadMessage(hookThreadId, ConfigureMessage, UIntPtr.Zero, IntPtr.Zero)) return Result(false, "快捷键线程不可用。");
+            done.WaitOne();
+        }
+        return result;
+    }
+
+    // Read-only Windows Core Audio session enumeration; no microphone capture.
+    [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class DeviceEnumeratorObject { }
+    [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)] interface DeviceEnumerator { [PreserveSig] int EnumAudioEndpoints(int flow, uint mask, out DeviceCollection devices); }
+    [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)] interface DeviceCollection { [PreserveSig] int GetCount(out uint count); [PreserveSig] int Item(uint index, out AudioDevice device); }
+    [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)] interface AudioDevice { [PreserveSig] int Activate(ref Guid iid, uint context, IntPtr parameters, [MarshalAs(UnmanagedType.IUnknown)] out object value); }
+    [ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)] interface AudioManager { [PreserveSig] int GetAudioSessionControl(IntPtr guid, uint flags, out IntPtr value); [PreserveSig] int GetSimpleAudioVolume(IntPtr guid, uint flags, out IntPtr value); [PreserveSig] int GetSessionEnumerator(out SessionEnumerator value); }
+    [ComImport, Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)] interface SessionEnumerator { [PreserveSig] int GetCount(out int count); [PreserveSig] int GetSession(int index, [MarshalAs(UnmanagedType.IUnknown)] out object control); }
+    [ComImport, Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)] interface SessionControl {
+        [PreserveSig] int GetState(out int state); [PreserveSig] int GetDisplayName(out IntPtr value); [PreserveSig] int SetDisplayName(IntPtr value, IntPtr context); [PreserveSig] int GetIconPath(out IntPtr value); [PreserveSig] int SetIconPath(IntPtr value, IntPtr context); [PreserveSig] int GetGroupingParam(out Guid value); [PreserveSig] int SetGroupingParam(IntPtr value, IntPtr context); [PreserveSig] int RegisterAudioSessionNotification(IntPtr value); [PreserveSig] int UnregisterAudioSessionNotification(IntPtr value); [PreserveSig] int GetSessionIdentifier(out IntPtr value); [PreserveSig] int GetSessionInstanceIdentifier(out IntPtr value); [PreserveSig] int GetProcessId(out uint pid);
+    }
+    static void ReleaseCom(object value) { if (value != null && Marshal.IsComObject(value)) Marshal.ReleaseComObject(value); }
+    static Dictionary<string, object> MicrophoneClients() {
+        var clients = new List<Dictionary<string, object>>(); DeviceEnumerator enumerator = null; DeviceCollection devices = null;
+        try {
+            enumerator = (DeviceEnumerator)new DeviceEnumeratorObject(); Marshal.ThrowExceptionForHR(enumerator.EnumAudioEndpoints(1, 1, out devices)); uint count; Marshal.ThrowExceptionForHR(devices.GetCount(out count));
+            for (uint i = 0; i < count; i++) {
+                AudioDevice device = null; object managerObject = null; SessionEnumerator sessions = null;
+                try {
+                    Marshal.ThrowExceptionForHR(devices.Item(i, out device)); Guid iid = typeof(AudioManager).GUID; Marshal.ThrowExceptionForHR(device.Activate(ref iid, 23, IntPtr.Zero, out managerObject));
+                    var manager = (AudioManager)managerObject; Marshal.ThrowExceptionForHR(manager.GetSessionEnumerator(out sessions)); int length; Marshal.ThrowExceptionForHR(sessions.GetCount(out length));
+                    for (int index = 0; index < length; index++) {
+                        object controlObject = null;
+                        try { Marshal.ThrowExceptionForHR(sessions.GetSession(index, out controlObject)); var control = (SessionControl)controlObject; int state; uint pid; if (control.GetState(out state) >= 0 && state == 1 && control.GetProcessId(out pid) >= 0 && pid > 0) { using (var process = System.Diagnostics.Process.GetProcessById((int)pid)) clients.Add(new Dictionary<string, object> { { "pid", pid }, { "name", process.ProcessName }, { "bundle", "" } }); } }
+                        catch { /* A session can end while it is being enumerated. */ } finally { ReleaseCom(controlObject); }
+                    }
+                } catch { } finally { ReleaseCom(sessions); ReleaseCom(managerObject); ReleaseCom(device); }
+            }
+            return new Dictionary<string, object> { { "ok", true }, { "available", true }, { "clients", clients } };
+        } catch { return new Dictionary<string, object> { { "ok", false }, { "available", false }, { "message", "无法读取应用音频状态，可手动开始会议。" } }; }
+        finally { ReleaseCom(devices); ReleaseCom(enumerator); }
+    }
+
     static AutomationElement target;
     static IntPtr window;
     static int[] runtimeId;
@@ -142,9 +244,14 @@ public class DictationInput {
         var focused = AutomationElement.FocusedElement;
         return GetForegroundWindow() == window && Editable(focused) && runtimeId.SequenceEqual(focused.GetRuntimeId());
     }
+    [DllImport("user32.dll")] static extern uint GetClipboardSequenceNumber();
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hWnd);
     static bool Modifiers() { return new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (GetAsyncKeyState(key) & 0x8000) != 0); }
     static Dictionary<string, object> Handle(Dictionary<string, object> r) {
         string op = Convert.ToString(r["op"]);
+        if (op == "microphone-clients") return MicrophoneClients();
+        if (op == "workspace-watch") return WorkspaceWatch(r);
+        if (op == "clipboard-sequence") return new Dictionary<string, object> { { "ok", true }, { "sequence", GetClipboardSequenceNumber() } };
         if (op == "watch") return Watch(r.ContainsKey("key") ? Convert.ToString(r["key"]) : "off");
         if (op == "status") return new Dictionary<string, object> { { "ok", true }, { "available", true }, { "message", "支持普通文字输入框；管理员窗口和部分应用可能限制输入。" } };
         if (op == "clear") { target = null; selected = null; return Result(true); }
@@ -157,17 +264,25 @@ public class DictationInput {
             target = focused; window = foreground; runtimeId = id; selected = Selection(focused);
             return new Dictionary<string, object> { { "ok", true }, { "appName", System.Diagnostics.Process.GetProcessById((int)pid).ProcessName } };
         }
-        if (op != "insert" || target == null) return Result(false, "原输入框已失效，请复制文字后手动粘贴。");
+        if ((op != "insert" && op != "paste") || target == null) return Result(false, "原输入框已失效，请复制文字后手动粘贴。");
         int sent = 0;
         try {
-            string text = Convert.ToString(r["text"]);
-            if (String.IsNullOrEmpty(text) || text.Length > 20000 || text.Any(Char.IsControl)) return Result(false, "输入文字无效或过长。");
+            string text = r.ContainsKey("text") ? Convert.ToString(r["text"]) : "";
+            if (op != "paste" && (String.IsNullOrEmpty(text) || text.Length > 20000 || text.Any(Char.IsControl))) return Result(false, "输入文字无效或过长。");
             DateTime deadline = DateTime.UtcNow.AddSeconds(1.5);
             while (Modifiers() && DateTime.UtcNow < deadline) Thread.Sleep(20);
             if (Modifiers()) return Result(false, "快捷键仍被按住，请松开后手动复制文字。");
+            if (op == "paste") { if (!Editable(target) || !SetForegroundWindow(window)) return Result(false, "无法恢复原输入窗口，请手动粘贴。"); target.SetFocus(); Thread.Sleep(100); }
             if (!Matches()) return Result(false, "焦点已离开原输入框，未自动输入；文字已保留。");
             var now = Selection(target);
             if (selected != null && now != null && (selected.CompareEndpoints(TextPatternRangeEndpoint.Start, now, TextPatternRangeEndpoint.Start) != 0 || selected.CompareEndpoints(TextPatternRangeEndpoint.End, now, TextPatternRangeEndpoint.End) != 0)) return Result(false, "输入位置已改变，未自动输入；文字已保留。");
+            if (op == "paste") {
+                var keys = new INPUT[4]; for (int i = 0; i < keys.Length; i++) keys[i].type = 1;
+                keys[0].data.keyboard.vk = 0x11; keys[1].data.keyboard.vk = 0x56;
+                keys[2] = keys[1]; keys[2].data.keyboard.flags = 2; keys[3] = keys[0]; keys[3].data.keyboard.flags = 2;
+                uint count = SendInput(4, keys, Marshal.SizeOf(typeof(INPUT)));
+                return new Dictionary<string, object> { { "ok", count == 4 }, { "verified", false }, { "error", "请检查目标输入框，避免重复粘贴。" } };
+            }
             for (int offset = 0; offset < text.Length;) {
                 if (!Matches() || Modifiers()) return Result(false, "输入途中焦点或键盘状态改变，已停止。请检查已输入部分，避免重复粘贴。", sent);
                 int length = Math.Min(16, text.Length - offset);

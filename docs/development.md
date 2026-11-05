@@ -10,7 +10,7 @@
 
 | 构建宿主 | 所需准备 |
 | --- | --- |
-| Windows x64 | .NET Framework 编译器与 WPF 参考程序集；脚本使用系统 `Framework64/v4.0.30319/csc.exe` |
+| Windows x64 / arm64 | .NET Framework 编译器与 WPF 参考程序集；系统编译器或 .NET SDK Roslyn 生成 AnyCPU；arm64 运行需 .NET Framework 4.8.1 |
 | macOS | Xcode Command Line Tools（`xcrun swiftc`），以及下述 Windows 组件交叉编译依赖 |
 
 在非 Windows 宿主上，准备官方 .NET SDK 和 NuGet 包 `Microsoft.NETFramework.ReferenceAssemblies.net48` 中的参考程序集，再设置：
@@ -20,7 +20,7 @@ export SPEAKBRIDGE_DOTNET_DIR="/absolute/path/to/dotnet-sdk"
 export SPEAKBRIDGE_NET48_REFS="/absolute/path/to/net48/build/.NETFramework/v4.8"
 ```
 
-两处都是本机绝对路径占位符，必须替换为实际目录。SDK 根目录应包含 `dotnet` 和 `sdk/`；参考目录应包含 `mscorlib.dll`、`UIAutomationClient.dll` 等 net48 程序集。历史交叉编译使用 .NET SDK 8.0.427，见[0.6.0 构建记录](archive/releases/0.6.0-dictation.md)。本次整理没有重新做空白机器安装验证。
+两处都是本机绝对路径占位符，必须替换为实际目录。SDK 根目录应包含 `dotnet` 和 `sdk/`；参考目录应包含 `mscorlib.dll`、`UIAutomationClient.dll` 等 net48 程序集。历史交叉编译使用 .NET SDK 8.0.427，见[0.6.0 构建记录](archive/releases/0.6.0-dictation.md)。CI 使用 `node scripts/prepare-native-references.mjs` 下载并校验固定 SHA-256 的参考包，写入后续步骤环境；本机可手动设置相同路径。三平台空白 runner 的执行证据见[验证状态](verification.md)。
 
 Windows 组件源码／产物哈希记录在 `electron/native/dictation-win.build.json`。构建更新该清单时，应审查是否由预期编译器和源码产生，不能用旧二进制绕过检查。安装包用户无需这些开发工具。
 
@@ -50,6 +50,8 @@ npm run dev
 | 验证 | 命令 | 边界 |
 | --- | --- | --- |
 | 逻辑与协议 | `npm test` | Node 测试、存储、本机模拟 WebSocket／HTTP，不代表真实设备或云端成功 |
+| 本地工作区 | `node tests/workspace.e2e.cjs` | 先构建；合成录屏、裁剪、滚动截图、真实 OCR、文字问答本地 fixture 和 Word/PDF；首次下载 OCR 模型 |
+| 原生协议 | `node tests/native-protocol-smoke.cjs` | 仅无监听的协议与剪贴板计数，不输入或录音 |
 | 通用 Electron 流程 | `npm run test:e2e` | 先构建；隔离 userData、合成音频、本地模拟 API |
 | 听写设置与进度 UI | `node tests/dictation-cleanup.e2e.cjs`、`node tests/dictation-readiness.e2e.cjs` | 浏览器固定 fixture；不是原生自动输入验收 |
 | 纪要 UI 夹具 | `node tests/history-ui-fixture.cjs` | 启动隔离 Store / 固定资料服务，需配合浏览器执行生成、失败和取消场景；启动服务本身不是测试通过 |
@@ -77,22 +79,25 @@ node tests/dictation-cleanup-live.cjs ollama YOUR_LOCAL_MODEL
 | `npm run pack:win` | Windows x64 ZIP，原生 Windows 构建优先 |
 | `npm run dist:mac` | 当前构建架构 DMG |
 | `npm run dist:win` | Windows x64 NSIS 安装器 |
+| `npm run pack:win:arm64` / `npm run dist:win:arm64` | Windows arm64 ZIP / NSIS，优先使用 Windows 11 arm64 runner |
 
-默认输出目录为 `release/`。已有版本化校验脚本 `scripts/verify-package.cjs` 则读取 **`release/<package.version>/`**，并要求其中有 Mac 双架构、Windows x64 解包目录和三个 ZIP；两种目录约定不能混用。需要该校验时可在完成 `npm run build` 后使用：
+默认输出目录为 `release/`。已有版本化校验脚本 `scripts/verify-package.cjs` 则读取 **`release/<package.version>/`**，并要求其中有 Mac 双架构、Windows x64 / arm64 解包目录和四个 ZIP（也可传入 `darwin-arm64` 等目标只检查已构建包）；两种目录约定不能混用。需要该校验时可在完成 `npm run build` 后使用：
 
 ```sh
-npx electron-builder --mac zip --arm64 --x64 --config.directories.output=release/0.7.11 --publish never
-npx electron-builder --win zip --x64 --config.directories.output=release/0.7.11 --publish never
+npx electron-builder --mac zip --arm64 --x64 --config.directories.output=release/0.8.0 --publish never
+npx electron-builder --win zip --x64 --arm64 --config.directories.output=release/0.8.0 --publish never
 node scripts/verify-package.cjs
 ```
 
 版本目录需与 `package.json` 一致。上述完整校验在 Mac 上使用 `codesign`、`file`、`unzip`，检查源文件、原生架构、Mac 严格签名、ZIP 完整性，并生成 SHA-256 清单；它不是跨平台实机启动测试。修改配布文档后，旧包的内容也不等同于新源码，需要重新打包才能宣称一致。
 
+打包前钩子 `scripts/prepare-packaged-native.cjs` 会按 lockfile 的 SHA-512 下载缺失的平台 ASR 二进制，避免 Mac 交叉打包漏装 Windows / Intel 组件；不执行下载包中的安装脚本。
+
 保留 `asarUnpack` 的 ONNX Runtime、sherpa-onnx 和原生输入组件配置，以及根目录许可证和 `licenses/`。模型不内置。Mac 当前为 ad-hoc 签名，未做开发者签名／公证；Windows 未配置发布签名。
 
 [GitHub Actions 工作流](../.github/workflows/build.yml)仅由手动执行或 `v*` 标签推送触发，普通分支推送不触发。它使用 macOS / Windows runner 执行敏感信息检查、安装、测试、构建和打包，再上传 Actions artifacts；没有自动创建 GitHub Release。
 
-截至 2026-11-03 远程运行记录为 0。macOS job 尚未配置上述 .NET 交叉编译路径，空白 runner 仍有构建前置条件缺口；本次只整理文档并修正脚本帮助路径，没有修改 CI 或把它记为已通过。
+0.8.0 已加入 `setup-dotnet`、参考程序集准备、原生协议检查和 Windows 11 arm64 job。2026-11-04 三平台远程任务全部通过，见[验证状态](verification.md)；runner 的基础协议与构建检查仍不能替代真实麦克风、鼠标和目标应用输入验收。
 
 ## 自定义 Harness 协议
 

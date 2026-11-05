@@ -6,6 +6,7 @@ export class AudioCapture {
   private enabled = false;
   private stopped = false;
   private flushed?: () => void;
+  private mixed?: MediaStreamAudioDestinationNode;
   constructor(private onChunk: (chunk: Uint8Array) => void, private onLevel: (level: number) => void, private onEnded: () => void) {}
   async prepare(settings: Settings) {
     try {
@@ -21,6 +22,7 @@ export class AudioCapture {
       if (this.context.sampleRate !== 24000) throw new Error('当前设备不支持 24 kHz 音频采集。');
       await this.context.audioWorklet.addModule(new URL('pcm-worklet.js', document.baseURI).href);
       this.worklet = new AudioWorkletNode(this.context, 'pcm-recorder');
+      this.mixed = this.context.createMediaStreamDestination();
       this.worklet.port.onmessage = event => {
         if (event.data.flushed) { this.flushed?.(); return; }
         if (this.enabled) { this.onChunk(new Uint8Array(event.data.pcm)); this.onLevel(event.data.level); }
@@ -30,6 +32,7 @@ export class AudioCapture {
         const input = this.context.createMediaStreamSource(audio);
         const gain = this.context.createGain(); gain.gain.value = this.streams.length > 1 ? .7 : 1;
         input.connect(gain).connect(this.worklet);
+        gain.connect(this.mixed);
         stream.getAudioTracks().forEach(track => track.addEventListener('ended', () => { if (!this.stopped) this.onEnded(); }));
       }
       const mute = this.context.createGain(); mute.gain.value = 0;
@@ -42,6 +45,8 @@ export class AudioCapture {
     }
   }
   begin() { this.enabled = true; }
+  mediaStream() { return this.mixed?.stream; }
+  async pause(paused: boolean) { if (!this.context || this.stopped) return; if (paused) await this.context.suspend(); else await this.context.resume(); this.enabled = !paused; this.onLevel(0); }
   async stop() {
     if (this.stopped) return;
     this.stopped = true;

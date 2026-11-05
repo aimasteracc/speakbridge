@@ -24,7 +24,7 @@ function controller({ captures = [], inserts = [], engineStop = async () => {}, 
     return Promise.resolve({ ok: true, available: true });
   }, dispose() { events.push({ type: 'helper-killed' }); } };
   class LocalTranscriber { async connect() {} async stop() { await engineStop(); } }
-  const electron = { app, systemPreferences: { getMediaAccessStatus: () => 'granted' }, globalShortcut: { register(key) { shortcuts.add(key); return true; }, unregister(key) { shortcuts.delete(key); }, isRegistered: key => shortcuts.has(key) } };
+  const electron = { app, protocol: { registerSchemesAsPrivileged() {} }, systemPreferences: { getMediaAccessStatus: () => 'granted' }, globalShortcut: { register(key) { shortcuts.add(key); return true; }, unregister(key) { shortcuts.delete(key); }, isRegistered: key => shortcuts.has(key) } };
   const mainPath = path.resolve(__dirname, '../electron/main.cjs');
   const context = vm.createContext({ console, process, Buffer, AbortController, setImmediate,
     setTimeout(fn, ms) { const id = ++timerID; timers.set(id, { fn, ms }); return id; }, clearTimeout(id) { timers.delete(id); },
@@ -44,7 +44,7 @@ function controller({ captures = [], inserts = [], engineStop = async () => {}, 
     store = { settings: __settings, sessions: [] };
     whisper = { installed: () => true, ready: true, readyKey: 'sensevoice:auto' };
     nativeInput = __native; preferences = { holdKey: 'off', handsFreeShortcut: 'CommandOrControl+Shift+D', cleanupProvider: __cleanupProvider };
-    mainWindow = { hide() { __events.push({ type: 'main-hide' }); }, show() { __events.push({ type: 'main-show' }); } };
+    mainWindow = { isDestroyed() { return false; }, hide() { __events.push({ type: 'main-hide' }); }, show() { __events.push({ type: 'main-show' }); } };
     publish = (type, payload) => __events.push({ type, payload: payload === undefined ? undefined : JSON.parse(JSON.stringify(payload)) });
     showDictation = () => __events.push({ type: 'hud-show', phase: dictationFeedback?.phase });
     globalThis.testController = {

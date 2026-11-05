@@ -1,4 +1,5 @@
 import AppKit
+import CoreAudio
 import ApplicationServices
 
 // Keep the event tap off the request thread: AX calls in another application
@@ -107,6 +108,76 @@ final class HoldMonitor {
     }
 }
 let holdMonitor = HoldMonitor()
+// Local shortcut monitor. Only configured gestures are consumed; key display
+// emits named navigation keys and modifier shortcuts, never plain typed text.
+final class WorkspaceMonitor {
+    private var loop: CFRunLoop!
+    private var port: Port!
+    private var tap: CFMachPort?
+    private var source: CFRunLoopSource?
+    private var bindings: [String: String] = [:]
+    private var held = Set<String>()
+    private var showKeys = false
+    init() {
+        let done = DispatchSemaphore(value: 0)
+        Thread.detachNewThread { self.loop = CFRunLoopGetCurrent(); self.port = Port(); RunLoop.current.add(self.port, forMode: .default); done.signal(); CFRunLoopRun() }
+        done.wait()
+    }
+    func configure(_ next: [String: String], _ keys: Bool) -> [String: Any] {
+        let allowed = ["fn", "rightalt", "rightctrl", "mouse-middle", "mouse-back", "mouse-forward"]
+        guard next.count <= 6, next.keys.allSatisfy({ allowed.contains($0) }), next.values.allSatisfy({ ["hold", "dictation", "meeting", "overlay", "capture", "clipboard"].contains($0) }) else { return ["ok": false, "error": "快捷键无效。"] }
+        let done = DispatchSemaphore(value: 0); var result: [String: Any] = [:]
+        CFRunLoopPerformBlock(loop, CFRunLoopMode.defaultMode.rawValue) {
+            for key in self.held { output(["event": "shortcut", "action": self.bindings[key] ?? "hold", "key": key, "pressed": false]) }
+            self.held.removeAll(); self.bindings = next; self.showKeys = keys
+            if let tap = self.tap { CGEvent.tapEnable(tap: tap, enable: false); CFMachPortInvalidate(tap) }
+            if let source = self.source { CFRunLoopRemoveSource(self.loop, source, .commonModes) }
+            self.tap = nil; self.source = nil
+            if next.isEmpty && !keys { result = ["ok": true, "available": true] }
+            else if next["fn"] != nil && originalSpeaklyRunning() { result = ["ok": false, "available": false, "error": speaklyConflictMessage] }
+            else if !AXIsProcessTrusted() { result = ["ok": true, "available": false, "message": "请允许辅助功能后重新检查。"] }
+            else {
+                let mask = [CGEventType.flagsChanged, .keyDown, .otherMouseDown, .otherMouseUp].reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
+                self.tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap, eventsOfInterest: mask, callback: { _, type, event, info in guard let info = info else { return Unmanaged.passUnretained(event) }; return Unmanaged<WorkspaceMonitor>.fromOpaque(info).takeUnretainedValue().receive(type, event) }, userInfo: Unmanaged.passUnretained(self).toOpaque())
+                if let tap = self.tap, let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) { self.source = source; CFRunLoopAddSource(self.loop, source, .commonModes); CGEvent.tapEnable(tap: tap, enable: true); result = ["ok": true, "available": true] }
+                else { result = ["ok": false, "available": false, "error": "无法监听键盘与鼠标，请重新检查辅助功能权限。"] }
+            }
+            done.signal()
+        }
+        CFRunLoopWakeUp(loop); done.wait(); return result
+    }
+    private func receive(_ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            for key in held { output(["event": "shortcut", "action": bindings[key] ?? "hold", "key": key, "pressed": false]) }; held.removeAll()
+            output(["event": "watch-error", "message": "快捷键监听已暂停，请重新检查权限。"]); return Unmanaged.passUnretained(event)
+        }
+        var key = "", down = false
+        if type == .flagsChanged {
+            let code = event.getIntegerValueField(.keyboardEventKeycode)
+            key = code == 63 ? "fn" : code == 61 ? "rightalt" : code == 62 ? "rightctrl" : ""
+            let mask: UInt64 = code == 63 ? CGEventFlags.maskSecondaryFn.rawValue : code == 61 ? 0x40 : 0x2000
+            down = event.flags.rawValue & mask != 0
+        } else if type == .otherMouseDown || type == .otherMouseUp {
+            let button = event.getIntegerValueField(.mouseEventButtonNumber)
+            key = button == 2 ? "mouse-middle" : button == 3 ? "mouse-back" : button == 4 ? "mouse-forward" : ""; down = type == .otherMouseDown
+        }
+        if let action = bindings[key] {
+            if key == "fn", down, originalSpeaklyRunning() { output(["event": "watch-error", "message": speaklyConflictMessage]); return Unmanaged.passUnretained(event) }
+            let owned = held.contains(key) || down
+            if down != held.contains(key) { if down { held.insert(key) } else { held.remove(key) }; output(["event": "shortcut", "action": action, "key": key, "pressed": down]) }
+            return owned ? nil : Unmanaged.passUnretained(event)
+        }
+        if showKeys && type == .keyDown {
+            let code = event.getIntegerValueField(.keyboardEventKeycode)
+            let names: [Int64: String] = [36:"Enter",48:"Tab",49:"Space",51:"Delete",53:"Esc",123:"←",124:"→",125:"↓",126:"↑"]
+            if let name = names[code] { output(["event": "capture-key", "label": name]) }
+            else if event.flags.contains(.maskCommand) || event.flags.contains(.maskControl) { output(["event": "capture-key", "label": (event.flags.contains(.maskCommand) ? "⌘" : "Ctrl") + (event.flags.contains(.maskShift) ? " + Shift" : "") + " + Key"]) }
+        }
+        return Unmanaged.passUnretained(event)
+    }
+}
+let workspaceMonitor = WorkspaceMonitor()
+
 
 // One helper per app; AX references never leave this process. Destination text
 // is not read. Clipboard fallback restores all formats and never emits Return.
@@ -255,8 +326,32 @@ func pasteText(_ text: String, into element: AXUIElement) -> [String: Any] {
     return ["ok": true, "method": "clipboard", "verified": confirmed, "sent": text.utf16.count,
             "diagnostics": inputDiagnostics("insert", confirmed ? "PASTE_VERIFIED" : "PASTE_UNVERIFIED", element)]
 }
+func microphoneClients() -> [String: Any] {
+    var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyProcessObjectList, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    let system = AudioObjectID(kAudioObjectSystemObject)
+    guard AudioObjectHasProperty(system, &address) else { return ["ok": true, "available": false, "message": "此 macOS 版本不支持按应用检测麦克风；可手动开始会议。"] }
+    var size: UInt32 = 0
+    guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size) == noErr, size < 65536 else { return ["ok": false, "error": "无法读取音频进程。"] }
+    if size == 0 { return ["ok": true, "available": true, "clients": []] }
+    var objects = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+    let result = objects.withUnsafeMutableBytes { AudioObjectGetPropertyData(system, &address, 0, nil, &size, $0.baseAddress!) }
+    guard result == noErr else { return ["ok": false, "error": "无法读取音频进程。"] }
+    var clients: [[String: Any]] = []
+    for object in objects {
+        var running: UInt32 = 0; var length = UInt32(MemoryLayout<UInt32>.size)
+        var runningAddress = AudioObjectPropertyAddress(mSelector: kAudioProcessPropertyIsRunningInput, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        if AudioObjectGetPropertyData(object, &runningAddress, 0, nil, &length, &running) != noErr || running == 0 { continue }
+        var pid: pid_t = 0; length = UInt32(MemoryLayout<pid_t>.size)
+        var pidAddress = AudioObjectPropertyAddress(mSelector: kAudioProcessPropertyPID, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        if AudioObjectGetPropertyData(object, &pidAddress, 0, nil, &length, &pid) == noErr, let app = NSRunningApplication(processIdentifier: pid) { clients.append(["pid": pid, "name": app.localizedName ?? "", "bundle": app.bundleIdentifier ?? ""]) }
+    }
+    return ["ok": true, "available": true, "clients": clients]
+}
 func handle(_ request: [String: Any]) -> [String: Any] {
     let op = request["op"] as? String ?? ""
+    if op == "microphone-clients" { return microphoneClients() }
+    if op == "workspace-watch" { return workspaceMonitor.configure(request["bindings"] as? [String: String] ?? [:], request["keys"] as? Bool ?? false) }
+    if op == "clipboard-sequence" { return ["ok": true, "sequence": NSPasteboard.general.changeCount] }
     if op == "watch" { return holdMonitor.configure(request["key"] as? String ?? "off") }
     if op == "status" {
         let prompt = request["prompt"] as? Bool ?? false
@@ -286,21 +381,34 @@ func handle(_ request: [String: Any]) -> [String: Any] {
         target = element; targetPID = pid; targetRange = range(element)
         return ["ok": true, "appName": NSRunningApplication(processIdentifier: pid)?.localizedName ?? "目标应用", "diagnostics": inputDiagnostics("capture", "TARGET_READY", element)]
     }
-    guard op == "insert", let element = target else { return failure("原输入框已失效，请复制文字后手动粘贴。") }
+    guard op == "insert" || op == "paste", let element = target else { return failure("原输入框已失效，请复制文字后手动粘贴。") }
     defer { target = nil; targetRange = nil }
     let text = request["text"] as? String ?? ""
-    guard !text.isEmpty, text.utf16.count <= 20000, !text.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) else { return failure("输入文字无效或过长。") }
+    guard op == "paste" || (!text.isEmpty && text.utf16.count <= 20000 && !text.unicodeScalars.contains(where: { $0.properties.generalCategory == .control })) else { return failure("输入文字无效或过长。") }
     // Wait for the global shortcut modifiers to be released, never synthesize
     // releases for keys physically held by the user.
     let mask: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
     let deadline = Date().addingTimeInterval(1.5)
     while !CGEventSource.flagsState(.combinedSessionState).intersection(mask).isEmpty && Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
     guard CGEventSource.flagsState(.combinedSessionState).intersection(mask).isEmpty else { return failure("快捷键仍被按住，请松开后手动复制文字。") }
+    if op == "paste" {
+        guard editable(element), let application = NSRunningApplication(processIdentifier: targetPID) else { return failure("原输入框已关闭。") }
+        application.activate(options: [.activateIgnoringOtherApps])
+        AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        let focusDeadline = Date().addingTimeInterval(1)
+        while !matches(element) && Date() < focusDeadline { RunLoop.current.run(until: Date().addingTimeInterval(0.025)) }
+    }
     guard matches(element) else { return failure("焦点已离开原输入框，未自动输入；文字已保留。", code: "FOCUS_CHANGED") }
     if let old = targetRange, let now = range(element), old.location != now.location || old.length != now.length { return failure("输入位置已改变，未自动输入；文字已保留。", code: "SELECTION_CHANGED") }
     // WebKit can report a successful AXSelectedText write without changing
     // the editor or dispatching input. Use the editor's normal paste action
     // for native and web controls; never infer insertion from setter success.
+    if op == "paste" {
+        let source = CGEventSource(stateID: .privateState)
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true), let up = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else { return failure("无法创建粘贴事件。") }
+        down.flags = .maskCommand; up.flags = []; down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
+        return ["ok": true, "verified": false, "message": "已请求粘贴，请检查目标输入框。"]
+    }
     return pasteText(text, into: element)
 }
 // Stdin runs independently; all AX requests remain serialized on the main

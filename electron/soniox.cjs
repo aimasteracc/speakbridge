@@ -2,10 +2,11 @@ const WebSocket = require('ws');
 const { cleanSpeechText } = require('./speech-text.cjs');
 const ENDPOINT = 'wss://stt-rt.soniox.com/transcribe-websocket';
 function sonioxConfig(settings) {
+  const hints = [...new Set([...(settings.sourceLanguage !== 'auto' ? [settings.sourceLanguage] : []), ...(settings.spokenLanguages || [])])];
   return {
     model: 'stt-rt-v5', audio_format: 'pcm_s16le', sample_rate: 24000, num_channels: 1,
     enable_endpoint_detection: true,
-    ...(settings.sourceLanguage !== 'auto' ? { language_hints: [settings.sourceLanguage] } : {}),
+    ...(hints.length ? { language_hints: hints } : {}),
     ...(settings.dictionary.length ? { context: { terms: settings.dictionary } } : {}),
   };
 }
